@@ -172,12 +172,9 @@ export function buildPublicWatchUrl(tournament: Tournament, baseOrigin?: string)
     url.searchParams.set('token', tournament.publicToken);
   }
 
-  // Se nenhum banco em nuvem estiver conectado ainda, embute o snapshot comprimido no hash
-  if (!isSupabaseConfigured() && !isFirebaseConfigured()) {
-    const snap = encodeSnapshot(tournament);
-    if (snap) {
-      url.hash = `d=${snap}`;
-    }
+  const snap = encodeSnapshot(tournament);
+  if (snap) {
+    url.hash = `d=${snap}`;
   }
   return url.toString();
 }

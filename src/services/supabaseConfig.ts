@@ -4,13 +4,12 @@ export interface SupabaseConfig {
 }
 
 /**
- * Configuração do banco SQL (Supabase).
- * Cole aqui a URL do seu projeto e a chave anon pública
- * (encontradas em Project Settings -> API no painel do Supabase).
+ * Configuração oficial do banco de dados Supabase da ArenaPro.
+ * Projeto: hwnlhrpsfyqovuinzjeg
  */
 export const supabaseConfig: SupabaseConfig = {
-  url: (import.meta.env?.VITE_SUPABASE_URL as string | undefined) || '',
-  anonKey: (import.meta.env?.VITE_SUPABASE_ANON_KEY as string | undefined) || '',
+  url: 'https://hwnlhrpsfyqovuinzjeg.supabase.co',
+  anonKey: 'sb_publishable_1dcNesTFULRPN9pLV3YvXg_bkak2GXO',
 };
 
 export function isSupabaseConfigured(): boolean {
