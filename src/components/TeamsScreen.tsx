@@ -1,0 +1,371 @@
+import { Pencil, Play, Plus, Shuffle, Sparkles, Trash2, Users, X } from 'lucide-react';
+import { useState } from 'react';
+import { TEAM_COLORS, TEAM_EMBLEMS } from '../engine/sports';
+import { createId } from '../engine/tournamentEngine';
+import type { Player, Team, Tournament } from '../types/tournament';
+
+interface TeamsScreenProps {
+  tournament: Tournament;
+  onUpdateTeams: (teams: Team[]) => void;
+  onStartTournament: (shuffle: boolean) => void;
+}
+
+export function TeamsScreen({
+  tournament,
+  onUpdateTeams,
+  onStartTournament,
+}: TeamsScreenProps) {
+  const defaultPlayerSlots = tournament.sport.id === 'futsal' ? 3 : 2;
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [teamName, setTeamName] = useState('');
+  const [playerNames, setPlayerNames] = useState<string[]>(
+    Array.from({ length: defaultPlayerSlots }, () => ''),
+  );
+  const [color, setColor] = useState(
+    TEAM_COLORS[tournament.teams.length % TEAM_COLORS.length],
+  );
+  const [emblem, setEmblem] = useState(
+    TEAM_EMBLEMS[tournament.teams.length % TEAM_EMBLEMS.length],
+  );
+  const [shuffleOnStart, setShuffleOnStart] = useState(true);
+
+  const resetForm = (nextIdx: number) => {
+    setEditingId(null);
+    setTeamName('');
+    setPlayerNames(Array.from({ length: defaultPlayerSlots }, () => ''));
+    setColor(TEAM_COLORS[nextIdx % TEAM_COLORS.length]);
+    setEmblem(TEAM_EMBLEMS[nextIdx % TEAM_EMBLEMS.length]);
+  };
+
+  const handleSaveTeam = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanedPlayers: Player[] = playerNames
+      .map((n) => n.trim())
+      .filter(Boolean)
+      .map((name, idx) => ({
+        id: editingId
+          ? tournament.teams.find((t) => t.id === editingId)?.players[idx]?.id ?? createId('pl')
+          : createId('pl'),
+        name,
+      }));
+
+    const autoName =
+      teamName.trim() ||
+      (cleanedPlayers.length > 0
+        ? cleanedPlayers.map((p) => p.name.split(' ')[0]).join(' / ')
+        : `Dupla ${tournament.teams.length + 1}`);
+
+    if (editingId) {
+      const updated = tournament.teams.map((t) =>
+        t.id === editingId
+          ? { ...t, name: autoName, players: cleanedPlayers, color, emblem }
+          : t,
+      );
+      onUpdateTeams(updated);
+      resetForm(updated.length);
+      return;
+    }
+
+    const newTeam: Team = {
+      id: createId('tm'),
+      name: autoName,
+      players: cleanedPlayers,
+      color,
+      emblem,
+    };
+    const next = [...tournament.teams, newTeam];
+    onUpdateTeams(next);
+    resetForm(next.length);
+  };
+
+  const handleEdit = (team: Team) => {
+    setEditingId(team.id);
+    setTeamName(team.name);
+    setPlayerNames(
+      team.players.length > 0
+        ? team.players.map((p) => p.name)
+        : Array.from({ length: defaultPlayerSlots }, () => ''),
+    );
+    setColor(team.color);
+    setEmblem(team.emblem);
+  };
+
+  const handleRemove = (id: string) => {
+    const next = tournament.teams.filter((t) => t.id !== id);
+    onUpdateTeams(next);
+    if (editingId === id) resetForm(next.length);
+  };
+
+  const handleFillSampleTeams = () => {
+    const needed = Math.max(2, tournament.targetTeamsCount) - tournament.teams.length;
+    if (needed <= 0) return;
+    const samplePairs = [
+      ['Lucas', 'Matheus'],
+      ['Gabriel', 'Rafael'],
+      ['Bruno', 'Thiago'],
+      ['Pedro', 'Felipe'],
+      ['Caio', 'Igor'],
+      ['André', 'Vitor'],
+      ['Diego', 'Renan'],
+      ['Léo', 'Danilo'],
+      ['Henrique', 'Breno'],
+      ['Cauã', 'Murilo'],
+      ['Gustavo', 'Enzo'],
+      ['Yuri', 'Otávio'],
+    ];
+
+    const created: Team[] = Array.from({ length: needed }, (_, i) => {
+      const idx = tournament.teams.length + i;
+      const pair = samplePairs[idx % samplePairs.length];
+      return {
+        id: createId('tm'),
+        name: `${pair[0]} / ${pair[1]}`,
+        players: pair.map((p) => ({ id: createId('pl'), name: p })),
+        color: TEAM_COLORS[idx % TEAM_COLORS.length],
+        emblem: TEAM_EMBLEMS[idx % TEAM_EMBLEMS.length],
+      };
+    });
+    onUpdateTeams([...tournament.teams, ...created]);
+  };
+
+  const canStart = tournament.teams.length >= 2;
+
+  return (
+    <main className="max-w-3xl mx-auto px-4 py-6 pb-28 space-y-6">
+      {/* Progress bar */}
+      <section className="rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-800 p-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-extrabold">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-sm font-extrabold text-slate-900 dark:text-white">
+              {tournament.teams.length} de {tournament.targetTeamsCount} times cadastrados
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Mínimo de 2 times para iniciar (ímpar gera BYE automático)
+            </p>
+          </div>
+        </div>
+        {tournament.teams.length < tournament.targetTeamsCount && (
+          <button
+            type="button"
+            onClick={handleFillSampleTeams}
+            className="h-10 px-3 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5 shrink-0"
+          >
+            <Sparkles className="w-4 h-4" />
+            Completar exemplo
+          </button>
+        )}
+      </section>
+
+      {/* Add / Edit Team Form */}
+      <form
+        onSubmit={handleSaveTeam}
+        className="rounded-3xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-800 p-5 space-y-4 shadow-sm"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+            {editingId ? 'Editar Time / Dupla' : 'Adicionar Time / Dupla'}
+          </h2>
+          {editingId && (
+            <button
+              type="button"
+              onClick={() => resetForm(tournament.teams.length)}
+              className="text-xs font-bold text-slate-500 flex items-center gap-1"
+            >
+              <X className="w-4 h-4" /> Cancelar
+            </button>
+          )}
+        </div>
+
+        <input
+          type="text"
+          value={teamName}
+          onChange={(e) => setTeamName(e.target.value)}
+          placeholder="Nome do time ou dupla (opcional se preencher jogadores)"
+          className="w-full h-12 px-4 rounded-2xl bg-amber-50/50 dark:bg-slate-800 border-2 border-amber-200/80 dark:border-slate-700 focus:border-emerald-500 outline-none text-sm font-bold text-slate-900 dark:text-white"
+        />
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              Jogadores {tournament.sport.trackPlayerGoals ? '(para ranking de artilheiro)' : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPlayerNames((prev) => [...prev, ''])}
+              className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Jogador
+            </button>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {playerNames.map((pName, idx) => (
+              <div key={idx} className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={pName}
+                  onChange={(e) =>
+                    setPlayerNames((prev) =>
+                      prev.map((item, i) => (i === idx ? e.target.value : item)),
+                    )
+                  }
+                  placeholder={`Jogador ${idx + 1}`}
+                  className="flex-1 h-11 px-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+                />
+                {playerNames.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPlayerNames((prev) => prev.filter((_, i) => i !== idx))
+                    }
+                    className="w-9 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-rose-500 flex items-center justify-center"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Color + Emblem */}
+        <div className="grid sm:grid-cols-2 gap-3 pt-1">
+          <div>
+            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+              Cor
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {TEAM_COLORS.slice(0, 8).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  aria-label={`Cor ${c}`}
+                  className={`w-8 h-8 rounded-full border-2 transition ${
+                    color === c ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+              Emblema
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {TEAM_EMBLEMS.slice(0, 8).map((em) => (
+                <button
+                  key={em}
+                  type="button"
+                  onClick={() => setEmblem(em)}
+                  className={`w-8 h-8 rounded-xl text-base flex items-center justify-center border ${
+                    emblem === em
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  {em}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          className="w-full h-12 rounded-2xl bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 active:scale-[0.99] transition"
+        >
+          <Plus className="w-5 h-5" />
+          {editingId ? 'Salvar Alterações' : 'Adicionar Time'}
+        </button>
+      </form>
+
+      {/* Registered Teams List */}
+      {tournament.teams.length > 0 && (
+        <section className="space-y-2.5">
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Times Inscritos ({tournament.teams.length})
+          </h3>
+          <div className="grid sm:grid-cols-2 gap-2.5">
+            {tournament.teams.map((team, idx) => (
+              <div
+                key={team.id}
+                className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 text-white font-bold shadow-sm"
+                    style={{ backgroundColor: team.color }}
+                  >
+                    {team.emblem}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-sm text-slate-900 dark:text-white truncate">
+                      {idx + 1}. {team.name}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                      {team.players.length > 0
+                        ? team.players.map((p) => p.name).join(' • ')
+                        : 'Sem jogadores listados'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(team)}
+                    aria-label="Editar time"
+                    className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(team.id)}
+                    aria-label="Remover time"
+                    className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Sticky Start Bar */}
+      <div className="fixed bottom-0 inset-x-0 z-20 p-4 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-amber-200 dark:border-slate-800">
+        <div className="max-w-3xl mx-auto flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShuffleOnStart((s) => !s)}
+            className={`h-14 px-4 rounded-2xl border-2 font-bold text-xs flex items-center gap-2 shrink-0 transition ${
+              shuffleOnStart
+                ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
+                : 'border-slate-200 dark:border-slate-700 text-slate-500'
+            }`}
+          >
+            <Shuffle className="w-4 h-4" />
+            <span className="hidden sm:inline">Sortear:</span>
+            {shuffleOnStart ? 'Sim' : 'Não'}
+          </button>
+
+          <button
+            type="button"
+            disabled={!canStart}
+            onClick={() => onStartTournament(shuffleOnStart)}
+            className="flex-1 h-14 rounded-2xl bg-emerald-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 font-extrabold text-base flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-[0.99] transition"
+          >
+            <Play className="w-5 h-5 fill-current" />
+            Gerar Jogos e Iniciar
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
