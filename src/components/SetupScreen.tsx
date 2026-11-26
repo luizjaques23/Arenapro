@@ -141,8 +141,8 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                   type="button"
                   onClick={() => handleSelectSport(preset.id)}
                   className={`p-3.5 rounded-2xl border-2 text-left transition active:scale-[0.98] ${selected
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
-                      : 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40'
                     }`}
                 >
                   <div className="flex items-center justify-between gap-1">
@@ -176,8 +176,8 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                     setTrackPlayerGoals(false);
                   }}
                   className={`h-11 rounded-xl text-xs font-bold border-2 ${scoringMode === 'sets'
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
-                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                     }`}
                 >
                   Pontos / Sets
@@ -189,8 +189,8 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                     setTrackPlayerGoals(true);
                   }}
                   className={`h-11 rounded-xl text-xs font-bold border-2 ${scoringMode === 'goals'
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
-                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                     }`}
                 >
                   Gols + Artilheiro
@@ -199,13 +199,6 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
             </div>
           )}
 
-          {sportId === 'futevolei' && (
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
-              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                Futevôlei: registro direto do vencedor por confronto (sem placar) e avanço imediato na chave.
-              </p>
-            </div>
-          )}
 
           {sportId !== 'futevolei' && scoringMode === 'sets' && (
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -220,8 +213,8 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                       type="button"
                       onClick={() => setSetsToWin(val)}
                       className={`flex-1 h-10 rounded-xl text-xs font-extrabold border-2 ${setsToWin === val
-                          ? 'border-emerald-500 bg-emerald-500 text-slate-950'
-                          : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                        ? 'border-emerald-500 bg-emerald-500 text-slate-950'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                         }`}
                     >
                       {val === 1 ? '1 Set' : 'Melhor de 3'}
@@ -260,8 +253,8 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                   type="button"
                   onClick={() => setWinByTwo((v) => !v)}
                   className={`w-full h-10 rounded-xl text-xs font-bold border-2 px-3 ${winByTwo
-                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
-                      : 'border-slate-200 dark:border-slate-700 text-slate-500'
+                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-500'
                     }`}
                 >
                   Vai a 2: {winByTwo ? 'Sim' : 'Não'}
@@ -280,9 +273,9 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
             <button
               type="button"
               onClick={() => setFormat('bracket')}
-              className={`p-4 rounded-2xl border-2 text-left transition flex items-start gap-3 ${format === 'bracket'
-                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
-                  : 'border-slate-200 dark:border-slate-800'
+              className={`p-4 rounded-2xl border-2 text-left transition flex items-center gap-3 ${format === 'bracket'
+                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
+                : 'border-slate-200 dark:border-slate-800'
                 }`}
             >
               <div className="w-10 h-10 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0">
@@ -290,10 +283,7 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
               </div>
               <div>
                 <p className="font-extrabold text-sm text-slate-900 dark:text-white">
-                  Chaveamento Híbrido (Vencedores x Repescagem + Finais)
-                </p>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                  Eliminatória dupla até as Semifinais (cruzamento anti-revanche) e Fase Final com 3º/4º e Grande Final (16 times = 30 jogos).
+                  Chaveamento Híbrido
                 </p>
               </div>
             </button>
@@ -302,8 +292,8 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
               type="button"
               onClick={() => setFormat('king_of_court')}
               className={`p-4 rounded-2xl border-2 text-left transition flex items-start gap-3 ${format === 'king_of_court'
-                  ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40'
-                  : 'border-slate-200 dark:border-slate-800'
+                ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40'
+                : 'border-slate-200 dark:border-slate-800'
                 }`}
             >
               <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0">
@@ -339,8 +329,8 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                 type="button"
                 onClick={() => setTargetTeamsCount(n)}
                 className={`h-11 px-4 rounded-xl font-extrabold text-sm border-2 transition ${targetTeamsCount === n
-                    ? 'border-emerald-500 bg-emerald-500 text-slate-950'
-                    : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                  ? 'border-emerald-500 bg-emerald-500 text-slate-950'
+                  : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                   }`}
               >
                 {n}
@@ -396,10 +386,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
               onChange={(e) => handlePinChange(e.target.value)}
               placeholder="Ex: 1234 (somente números)"
               className={`w-full h-14 pl-4 pr-12 rounded-2xl bg-amber-50/60 dark:bg-slate-800 border-2 outline-none text-lg font-extrabold tracking-widest text-slate-900 dark:text-white ${pinError
-                  ? 'border-rose-500 focus:border-rose-500'
-                  : isValidNumericPin(pin)
-                    ? 'border-emerald-500 focus:border-emerald-500'
-                    : 'border-amber-200 dark:border-slate-700 focus:border-emerald-500'
+                ? 'border-rose-500 focus:border-rose-500'
+                : isValidNumericPin(pin)
+                  ? 'border-emerald-500 focus:border-emerald-500'
+                  : 'border-amber-200 dark:border-slate-700 focus:border-emerald-500'
                 }`}
             />
             <button

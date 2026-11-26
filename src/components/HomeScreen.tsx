@@ -51,9 +51,6 @@ export function HomeScreen({
           <h2 className="font-score text-4xl sm:text-5xl font-extrabold uppercase tracking-wide leading-none">
             Gerencie seu Torneio na Quadra
           </h2>
-          <p className="text-sm sm:text-base text-slate-300 max-w-md">
-            Chaveamento vencedores x perdedores, Rei da Quadra, placar gigante para sol forte e relatório em PDF.
-          </p>
 
           <div className="pt-2 flex flex-col sm:flex-row gap-3">
             <button
@@ -150,9 +147,12 @@ export function HomeScreen({
       )}
 
       {/* Developer Footer */}
-      <footer className="mt-8 rounded-3xl bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border border-amber-200/80 dark:border-slate-800 p-5 flex flex-col items-center text-center gap-3 shadow-sm">
-        <div className="flex items-center justify-center gap-2.5">
-          <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
+      <footer className="mt-14 sm:mt-16 pt-6 pb-6 flex flex-col items-center text-center gap-2.5">
+        <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          © {new Date().getFullYear()} ArenaPro - Torneios • Todos os direitos reservados.
+        </p>
+        <div className="flex items-center justify-center gap-2 pt-0.5">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
             Desenvolvido por
           </p>
           <a
@@ -161,7 +161,7 @@ export function HomeScreen({
             rel="noopener noreferrer"
             aria-label="Instagram do desenvolvedor"
             title="Instagram"
-            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white shadow-md hover:opacity-95 active:scale-[0.96] transition"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white shadow-sm hover:opacity-90 active:scale-95 transition"
           >
             <svg
               viewBox="0 0 24 24"
@@ -170,7 +170,7 @@ export function HomeScreen({
               strokeWidth="2.2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="w-5 h-5"
+              className="w-4 h-4"
               aria-hidden="true"
             >
               <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
@@ -179,9 +179,6 @@ export function HomeScreen({
             </svg>
           </a>
         </div>
-        <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-          © {new Date().getFullYear()} ArenaPro - Torneios • Todos os direitos reservados.
-        </p>
       </footer>
     </main>
   );
