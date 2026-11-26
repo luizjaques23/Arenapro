@@ -16,12 +16,14 @@ import type { Tournament } from '../types/tournament';
 
 interface PinUnlockModalProps {
   tournament: Tournament;
+  action?: 'open' | 'delete';
   onClose: () => void;
   onUnlocked: (tournamentId: string, newPinHash?: string) => void;
 }
 
 export function PinUnlockModal({
   tournament,
+  action = 'open',
   onClose,
   onUnlocked,
 }: PinUnlockModalProps) {
@@ -30,6 +32,7 @@ export function PinUnlockModal({
   const [error, setError] = useState<string | null>(null);
 
   const isLegacyWithoutPin = !hasTournamentPin(tournament);
+  const isDeleteAction = action === 'delete';
   const sportName = getSportDisplayName(tournament.sport);
 
   const handlePinChange = (raw: string) => {
@@ -73,9 +76,21 @@ export function PinUnlockModal({
       aria-modal="true"
       aria-labelledby="pin-unlock-title"
     >
-      <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border-2 border-amber-300 dark:border-slate-700 p-6 shadow-2xl space-y-5">
+      <div
+        className={`w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border-2 p-6 shadow-2xl space-y-5 ${
+          isDeleteAction
+            ? 'border-rose-400 dark:border-rose-700'
+            : 'border-amber-300 dark:border-slate-700'
+        }`}
+      >
         <div className="flex items-start gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+          <div
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+              isDeleteAction
+                ? 'bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400'
+                : 'bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400'
+            }`}
+          >
             {isLegacyWithoutPin ? (
               <KeyRound className="w-6 h-6" />
             ) : (
@@ -83,8 +98,18 @@ export function PinUnlockModal({
             )}
           </div>
           <div className="min-w-0">
-            <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[11px] font-extrabold uppercase tracking-wider">
-              {isLegacyWithoutPin ? 'Definir Senha' : 'Torneio Protegido'}
+            <span
+              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wider ${
+                isDeleteAction
+                  ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+              }`}
+            >
+              {isDeleteAction
+                ? 'Senha para Excluir'
+                : isLegacyWithoutPin
+                  ? 'Definir Senha'
+                  : 'Torneio Protegido'}
             </span>
             <h3
               id="pin-unlock-title"
@@ -106,7 +131,9 @@ export function PinUnlockModal({
             >
               {isLegacyWithoutPin
                 ? `Este torneio ainda não possui senha. Defina uma senha numérica (mín. ${MIN_PIN_LENGTH} dígitos):`
-                : 'Digite a senha numérica deste torneio para entrar e gerenciar:'}
+                : isDeleteAction
+                  ? 'Digite a senha numérica criada para este torneio para confirmar a exclusão:'
+                  : 'Digite a senha numérica deste torneio para entrar e gerenciar:'}
             </label>
 
             <div className="relative">
@@ -158,9 +185,17 @@ export function PinUnlockModal({
             </button>
             <button
               type="submit"
-              className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition"
+              className={`h-12 rounded-xl text-white font-extrabold text-sm shadow-lg active:scale-[0.98] transition ${
+                isDeleteAction
+                  ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
+                  : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+              }`}
             >
-              {isLegacyWithoutPin ? 'Salvar e Entrar' : 'Desbloquear'}
+              {isDeleteAction
+                ? 'Confirmar Exclusão'
+                : isLegacyWithoutPin
+                  ? 'Salvar e Entrar'
+                  : 'Desbloquear'}
             </button>
           </div>
         </form>

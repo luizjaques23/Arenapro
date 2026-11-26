@@ -4,6 +4,7 @@ import {
   FileText,
   FolderOpen,
   History,
+  Lock,
   Trash2,
   Trophy,
   Upload,
@@ -27,7 +28,6 @@ export function HistoryScreen({
   onDeleteTournament,
   onImportJson,
 }: HistoryScreenProps) {
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [pdfNotice, setPdfNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -90,7 +90,6 @@ export function HistoryScreen({
             const dateStr = new Date(t.finishedAt ?? t.createdAt).toLocaleDateString(
               'pt-BR',
             );
-            const isConfirming = confirmDeleteId === t.id;
 
             return (
               <div
@@ -111,6 +110,9 @@ export function HistoryScreen({
                         }`}
                       >
                         {t.status === 'finished' ? 'Finalizado' : 'Em andamento'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        <Lock className="w-2.5 h-2.5" /> Protegido por senha
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
@@ -167,27 +169,16 @@ export function HistoryScreen({
                     <Download className="w-4 h-4" />
                     JSON
                   </button>
-                  {isConfirming ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onDeleteTournament(t.id);
-                        setConfirmDeleteId(null);
-                      }}
-                      className="h-11 px-3 rounded-xl bg-rose-600 text-white font-bold text-xs"
-                    >
-                      Confirmar exclusão
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteId(t.id)}
-                      aria-label="Excluir torneio"
-                      className="h-11 w-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTournament(t.id)}
+                    aria-label="Excluir torneio com senha"
+                    title="Excluir torneio (exige senha)"
+                    className="h-11 px-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Excluir</span>
+                  </button>
                 </div>
               </div>
             );

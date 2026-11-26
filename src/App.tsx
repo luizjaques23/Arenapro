@@ -172,30 +172,18 @@ export function App() {
     const target = tournaments.find((t) => t.id === id);
     if (!target) return;
 
-    // Ongoing tournaments always require password authentication before viewing/managing
-    // Switching between tournaments also isolates session unlock per tournament
-    if (target.status !== 'finished') {
-      lockTournamentSession();
-      setPendingPinRequest({ tournamentId: target.id, action: 'open' });
-      return;
-    }
-
-    enterTournamentDirect(target);
+    // Require the tournament's password before opening/managing from Home or History
+    lockTournamentSession();
+    setPendingPinRequest({ tournamentId: target.id, action: 'open' });
   };
 
   const handleDeleteTournament = (id: string) => {
     const target = tournaments.find((t) => t.id === id);
     if (!target) return;
 
-    if (target.status !== 'finished' && !isTournamentUnlockedInSession(target)) {
-      setPendingPinRequest({ tournamentId: target.id, action: 'delete' });
-      return;
-    }
-
-    removeTournamentPinData(id);
-    setTournaments((prev) => prev.filter((t) => t.id !== id));
-    if (activeTournamentId === id) setActiveTournamentId(null);
-    showToastMessage('Torneio excluído.');
+    // Always require the tournament's created password before deleting in History
+    lockTournamentSession(target.id);
+    setPendingPinRequest({ tournamentId: target.id, action: 'delete' });
   };
 
   const handlePinUnlocked = (tournamentId: string, newPinHash?: string) => {
@@ -501,6 +489,7 @@ export function App() {
             {pendingUnlockTournament && (
               <PinUnlockModal
                 tournament={pendingUnlockTournament}
+                action={pendingPinRequest?.action ?? 'open'}
                 onClose={() => setPendingPinRequest(null)}
                 onUnlocked={handlePinUnlocked}
               />
