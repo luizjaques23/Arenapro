@@ -30,6 +30,7 @@ export function ResultsScreen({
   onGoHome,
 }: ResultsScreenProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
+  const isFutevolei = tournament.sport.id === 'futevolei';
 
   const standings = computeStandings(tournament);
   const scorers = computeTopScorers(tournament);
@@ -79,6 +80,9 @@ export function ResultsScreen({
     }
   };
 
+  const formatTeamLabel = (emblem: string, name: string) =>
+    isFutevolei || !emblem ? name : `${emblem} ${name}`;
+
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 pb-24 space-y-6">
       {feedback && (
@@ -97,7 +101,7 @@ export function ResultsScreen({
             Campeão • {getSportDisplayName(tournament.sport)}
           </p>
           <h2 className="font-score text-5xl sm:text-6xl font-extrabold uppercase tracking-wide">
-            {champion.team.emblem} {champion.team.name}
+            {formatTeamLabel(champion.team.emblem, champion.team.name)}
           </h2>
           {champion.team.players.length > 0 && (
             <p className="text-sm font-semibold text-emerald-300">
@@ -106,8 +110,14 @@ export function ResultsScreen({
           )}
           <div className="pt-2 flex items-center justify-center gap-4 text-xs font-bold text-slate-300">
             <span>{champion.wins} vitórias</span>
-            <span>•</span>
-            <span>Saldo: {champion.pointDiff > 0 ? `+${champion.pointDiff}` : champion.pointDiff}</span>
+            {!isFutevolei && (
+              <>
+                <span>•</span>
+                <span>
+                  Saldo: {champion.pointDiff > 0 ? `+${champion.pointDiff}` : champion.pointDiff}
+                </span>
+              </>
+            )}
           </div>
         </section>
       )}
@@ -143,7 +153,7 @@ export function ResultsScreen({
                   2º Lugar
                 </p>
                 <p className="font-extrabold text-slate-900 dark:text-white truncate">
-                  {runnerUp.team.emblem} {runnerUp.team.name}
+                  {formatTeamLabel(runnerUp.team.emblem, runnerUp.team.name)}
                 </p>
               </div>
             </div>
@@ -156,7 +166,7 @@ export function ResultsScreen({
                   3º Lugar
                 </p>
                 <p className="font-extrabold text-slate-900 dark:text-white truncate">
-                  {thirdPlace.team.emblem} {thirdPlace.team.name}
+                  {formatTeamLabel(thirdPlace.team.emblem, thirdPlace.team.name)}
                 </p>
               </div>
             </div>
@@ -209,7 +219,7 @@ export function ResultsScreen({
                 <span className="font-score text-xl font-extrabold w-6 text-slate-500">
                   {row.rank}º
                 </span>
-                <span>{row.team.emblem}</span>
+                {!isFutevolei && <span>{row.team.emblem}</span>}
                 <span className="font-bold text-slate-900 dark:text-white truncate">
                   {row.team.name}
                 </span>
@@ -218,9 +228,11 @@ export function ResultsScreen({
                 <span>
                   {row.wins}V / {row.losses}D
                 </span>
-                <span className="w-10 text-right">
-                  {row.pointDiff > 0 ? `+${row.pointDiff}` : row.pointDiff}
-                </span>
+                {!isFutevolei && (
+                  <span className="w-10 text-right">
+                    {row.pointDiff > 0 ? `+${row.pointDiff}` : row.pointDiff}
+                  </span>
+                )}
               </div>
             </div>
           ))}

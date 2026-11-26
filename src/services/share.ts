@@ -21,9 +21,13 @@ export function buildWhatsappSummary(tournament: Tournament): string {
     '',
   ];
 
+  const isFutevolei = tournament.sport.id === 'futevolei';
+  const fmtTeam = (emblem: string, name: string) =>
+    isFutevolei || !emblem ? name : `${emblem} ${name}`;
+
   const champion = standings.find((s) => s.team.id === tournament.championId) ?? standings[0];
   if (champion) {
-    lines.push(`🥇 *CAMPEÃO:* ${champion.team.emblem} ${champion.team.name}`);
+    lines.push(`🥇 *CAMPEÃO:* ${fmtTeam(champion.team.emblem, champion.team.name)}`);
     if (champion.team.players.length > 0) {
       lines.push(`   (${champion.team.players.map((p) => p.name).join(' / ')})`);
     }
@@ -32,14 +36,14 @@ export function buildWhatsappSummary(tournament: Tournament): string {
   const runnerUp =
     standings.find((s) => s.team.id === tournament.runnerUpId) ?? standings[1];
   if (runnerUp && runnerUp.team.id !== champion?.team.id) {
-    lines.push(`🥈 *2º Lugar:* ${runnerUp.team.emblem} ${runnerUp.team.name}`);
+    lines.push(`🥈 *2º Lugar:* ${fmtTeam(runnerUp.team.emblem, runnerUp.team.name)}`);
   }
 
   if (standings[2]) {
-    lines.push(`🥉 *3º Lugar:* ${standings[2].team.emblem} ${standings[2].team.name}`);
+    lines.push(`🥉 *3º Lugar:* ${fmtTeam(standings[2].team.emblem, standings[2].team.name)}`);
   }
   if (tournament.fourthPlaceId && standings[3]) {
-    lines.push(`🏅 *4º Lugar:* ${standings[3].team.emblem} ${standings[3].team.name}`);
+    lines.push(`🏅 *4º Lugar:* ${fmtTeam(standings[3].team.emblem, standings[3].team.name)}`);
   }
 
   if (tournament.sport.trackPlayerGoals && scorers.length > 0) {

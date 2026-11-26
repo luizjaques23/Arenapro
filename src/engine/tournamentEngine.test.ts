@@ -8,6 +8,7 @@ import {
   finishMatch,
   finishTournamentManually,
   getAllMatches,
+  isPublicLinkActive,
   resetTournament,
   startTournament,
 } from './tournamentEngine';
@@ -285,5 +286,36 @@ describe('King of the Court & Futsal Goals & Resets', () => {
     const resetAll = resetTournament(t, 'all');
     expect(resetAll.teams).toHaveLength(0);
     expect(resetAll.status).toBe('setup');
+  });
+
+  it('generates publicToken, advances Futevôlei directly without scores, and auto-deactivates public link on finish', () => {
+    const futevolei = SPORT_PRESETS[0].defaultConfig;
+    const base = createTournament({
+      name: 'Futevôlei Sem Placar',
+      sport: futevolei,
+      format: 'bracket',
+      targetTeamsCount: 4,
+      teams: makeTeams(4),
+    });
+
+    expect(base.publicToken).toBeDefined();
+    expect(isPublicLinkActive(base)).toBe(true);
+
+    let t = startTournament(base, { shuffle: false });
+    expect(isPublicLinkActive(t)).toBe(true);
+
+    // Finish all 4 matches with direct winner selection (0x0, no sets)
+    for (let i = 0; i < 4; i += 1) {
+      const m = getPlayableMatches(t)[0];
+      t = finishMatch(t, m.id, {
+        winnerId: m.teamAId!,
+        scoreA: 0,
+        scoreB: 0,
+        sets: [],
+      });
+    }
+
+    expect(t.status).toBe('finished');
+    expect(isPublicLinkActive(t)).toBe(false);
   });
 });

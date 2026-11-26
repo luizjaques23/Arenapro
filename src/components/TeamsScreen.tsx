@@ -1,7 +1,20 @@
-import { Pencil, Play, Plus, Shuffle, Sparkles, Trash2, Users, X } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Link2,
+  Pencil,
+  Play,
+  Plus,
+  Shuffle,
+  Sparkles,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { TEAM_COLORS, TEAM_EMBLEMS } from '../engine/sports';
-import { createId } from '../engine/tournamentEngine';
+import { createId, isPublicLinkActive } from '../engine/tournamentEngine';
+import { buildPublicWatchUrl } from '../services/liveSync';
 import type { Player, Team, Tournament } from '../types/tournament';
 
 interface TeamsScreenProps {
@@ -15,6 +28,7 @@ export function TeamsScreen({
   onUpdateTeams,
   onStartTournament,
 }: TeamsScreenProps) {
+  const isFutevolei = tournament.sport.id === 'futevolei';
   const defaultPlayerSlots = tournament.sport.id === 'futsal' ? 3 : 2;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [teamName, setTeamName] = useState('');
@@ -28,13 +42,29 @@ export function TeamsScreen({
     TEAM_EMBLEMS[tournament.teams.length % TEAM_EMBLEMS.length],
   );
   const [shuffleOnStart, setShuffleOnStart] = useState(true);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const publicUrl = isPublicLinkActive(tournament) ? buildPublicWatchUrl(tournament) : '';
+
+  const handleCopyPublicLink = async () => {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopiedLink(true);
+      window.setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      // Fallback ignored
+    }
+  };
 
   const resetForm = (nextIdx: number) => {
     setEditingId(null);
     setTeamName('');
     setPlayerNames(Array.from({ length: defaultPlayerSlots }, () => ''));
-    setColor(TEAM_COLORS[nextIdx % TEAM_COLORS.length]);
-    setEmblem(TEAM_EMBLEMS[nextIdx % TEAM_EMBLEMS.length]);
+    if (!isFutevolei) {
+      setColor(TEAM_COLORS[nextIdx % TEAM_COLORS.length]);
+      setEmblem(TEAM_EMBLEMS[nextIdx % TEAM_EMBLEMS.length]);
+    }
   };
 
   const handleSaveTeam = (e: React.FormEvent) => {
@@ -55,10 +85,13 @@ export function TeamsScreen({
         ? cleanedPlayers.map((p) => p.name.split(' ')[0]).join(' / ')
         : `Dupla ${tournament.teams.length + 1}`);
 
+    const teamColor = isFutevolei ? '#10b981' : color;
+    const teamEmblem = isFutevolei ? '' : emblem;
+
     if (editingId) {
       const updated = tournament.teams.map((t) =>
         t.id === editingId
-          ? { ...t, name: autoName, players: cleanedPlayers, color, emblem }
+          ? { ...t, name: autoName, players: cleanedPlayers, color: teamColor, emblem: teamEmblem }
           : t,
       );
       onUpdateTeams(updated);
@@ -70,8 +103,8 @@ export function TeamsScreen({
       id: createId('tm'),
       name: autoName,
       players: cleanedPlayers,
-      color,
-      emblem,
+      color: teamColor,
+      emblem: teamEmblem,
     };
     const next = [...tournament.teams, newTeam];
     onUpdateTeams(next);
@@ -86,8 +119,10 @@ export function TeamsScreen({
         ? team.players.map((p) => p.name)
         : Array.from({ length: defaultPlayerSlots }, () => ''),
     );
-    setColor(team.color);
-    setEmblem(team.emblem);
+    if (!isFutevolei) {
+      setColor(team.color);
+      setEmblem(team.emblem);
+    }
   };
 
   const handleRemove = (id: string) => {
@@ -125,8 +160,8 @@ export function TeamsScreen({
         id: createId('tm'),
         name: `${pair[0]} / ${pair[1]}`,
         players: pair.map((p) => ({ id: createId('pl'), name: p })),
-        color: TEAM_COLORS[idx % TEAM_COLORS.length],
-        emblem: TEAM_EMBLEMS[idx % TEAM_EMBLEMS.length],
+        color: isFutevolei ? '#10b981' : TEAM_COLORS[idx % TEAM_COLORS.length],
+        emblem: isFutevolei ? '' : TEAM_EMBLEMS[idx % TEAM_EMBLEMS.length],
       };
     });
     onUpdateTeams([...tournament.teams, ...created]);
@@ -136,6 +171,31 @@ export function TeamsScreen({
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 pb-28 space-y-6">
+      {/* Public Tracking Link Banner */}
+      {publicUrl && (
+        <section className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 p-3.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Link2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-extrabold text-emerald-900 dark:text-emerald-200">
+                Link público ao vivo (somente leitura)
+              </p>
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 truncate">
+                {publicUrl}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyPublicLink}
+            className="h-9 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 shrink-0"
+          >
+            {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {copiedLink ? 'Copiado!' : 'Copiar link'}
+          </button>
+        </section>
+      )}
+
       {/* Progress bar */}
       <section className="rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-800 p-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -234,50 +294,52 @@ export function TeamsScreen({
           </div>
         </div>
 
-        {/* Color + Emblem */}
-        <div className="grid sm:grid-cols-2 gap-3 pt-1">
-          <div>
-            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
-              Cor
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {TEAM_COLORS.slice(0, 8).map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  aria-label={`Cor ${c}`}
-                  className={`w-8 h-8 rounded-full border-2 transition ${
-                    color === c ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
-                  }`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
+        {/* Color + Emblem (hidden for Futevôlei) */}
+        {!isFutevolei && (
+          <div className="grid sm:grid-cols-2 gap-3 pt-1">
+            <div>
+              <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                Cor
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {TEAM_COLORS.slice(0, 8).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    aria-label={`Cor ${c}`}
+                    className={`w-8 h-8 rounded-full border-2 transition ${
+                      color === c ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div>
-            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
-              Emblema
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {TEAM_EMBLEMS.slice(0, 8).map((em) => (
-                <button
-                  key={em}
-                  type="button"
-                  onClick={() => setEmblem(em)}
-                  className={`w-8 h-8 rounded-xl text-base flex items-center justify-center border ${
-                    emblem === em
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950'
-                      : 'border-slate-200 dark:border-slate-700'
-                  }`}
-                >
-                  {em}
-                </button>
-              ))}
+            <div>
+              <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                Emblema
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {TEAM_EMBLEMS.slice(0, 8).map((em) => (
+                  <button
+                    key={em}
+                    type="button"
+                    onClick={() => setEmblem(em)}
+                    className={`w-8 h-8 rounded-xl text-base flex items-center justify-center border ${
+                      emblem === em
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950'
+                        : 'border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <button
           type="submit"
@@ -301,15 +363,21 @@ export function TeamsScreen({
                 className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 flex items-center justify-between gap-3"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 text-white font-bold shadow-sm"
-                    style={{ backgroundColor: team.color }}
-                  >
-                    {team.emblem}
-                  </div>
+                  {isFutevolei ? (
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-sm font-extrabold text-slate-700 dark:text-slate-200 shrink-0">
+                      {idx + 1}
+                    </div>
+                  ) : (
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 text-white font-bold shadow-sm"
+                      style={{ backgroundColor: team.color }}
+                    >
+                      {team.emblem}
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <p className="font-extrabold text-sm text-slate-900 dark:text-white truncate">
-                      {idx + 1}. {team.name}
+                      {isFutevolei ? team.name : `${idx + 1}. ${team.name}`}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                       {team.players.length > 0

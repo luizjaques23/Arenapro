@@ -133,7 +133,10 @@ export function HistoryScreen({
                   <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 px-3.5 py-2.5 flex items-center gap-2.5">
                     <Trophy className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
-                      Campeão: {champ.emblem} {champ.name}
+                      Campeão:{' '}
+                      {t.sport.id === 'futevolei'
+                        ? champ.name
+                        : `${champ.emblem} ${champ.name}`}
                     </span>
                   </div>
                 )}

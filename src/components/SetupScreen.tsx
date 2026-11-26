@@ -160,7 +160,15 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
             </div>
           )}
 
-          {scoringMode === 'sets' && (
+          {sportId === 'futevolei' && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                Futevôlei: registro direto do vencedor por confronto (sem placar) e avanço imediato na chave.
+              </p>
+            </div>
+          )}
+
+          {sportId !== 'futevolei' && scoringMode === 'sets' && (
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">

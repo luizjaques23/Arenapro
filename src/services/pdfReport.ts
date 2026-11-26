@@ -22,9 +22,17 @@ function getTeamName(teams: Team[], teamId: string | null | undefined): string {
   return teams.find((t) => t.id === teamId)?.name ?? 'Time';
 }
 
-function formatMatchScore(match: Match, scoringMode: 'sets' | 'goals'): string {
+function formatMatchScore(
+  match: Match,
+  scoringMode: 'sets' | 'goals',
+  isFutevolei: boolean,
+  teams: Team[],
+): string {
   if (match.isBye) return 'BYE (Avanço automático)';
   if (match.status !== 'finished') return 'Pendente';
+  if (isFutevolei) {
+    return `Vencedor: ${getTeamName(teams, match.winnerId)}`;
+  }
   if (scoringMode === 'sets' && match.sets.length > 0) {
     const setsText = match.sets.map((s) => `${s.scoreA}x${s.scoreB}`).join(' | ');
     return `${match.scoreA} x ${match.scoreB} (${setsText})`;
@@ -33,6 +41,7 @@ function formatMatchScore(match: Match, scoringMode: 'sets' | 'goals'): string {
 }
 
 export function generateTournamentPdf(tournament: Tournament): string {
+  const isFutevolei = tournament.sport.id === 'futevolei';
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -201,7 +210,12 @@ export function generateTournamentPdf(tournament: Tournament): string {
         : m.teamBId
           ? getTeamName(tournament.teams, m.teamBId)
           : (m.slotBLabel ?? 'A definir');
-      const scoreText = formatMatchScore(m, tournament.sport.scoringMode);
+      const scoreText = formatMatchScore(
+        m,
+        tournament.sport.scoringMode,
+        isFutevolei,
+        tournament.teams,
+      );
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.8);

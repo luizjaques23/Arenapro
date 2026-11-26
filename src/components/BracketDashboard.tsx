@@ -1,24 +1,31 @@
 import {
+  Check,
   CheckCircle2,
   Clock,
+  Copy,
   Crown,
   Download,
   Flag,
+  Link2,
   ListOrdered,
   Play,
   RotateCcw,
   Swords,
   Trophy,
   Users,
+  X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { getSportDisplayName } from '../engine/sports';
-import { getAllMatches } from '../engine/tournamentEngine';
+import { getAllMatches, isPublicLinkActive } from '../engine/tournamentEngine';
+import { buildPublicWatchUrl } from '../services/liveSync';
 import type { BracketRound, Match, Team, Tournament } from '../types/tournament';
 
 interface BracketDashboardProps {
   tournament: Tournament;
+  readOnly?: boolean;
   onOpenMatch: (matchId: string) => void;
+  onSelectDirectWinner?: (matchId: string, winnerId: string) => void;
   onFinishManually: () => void;
   onOpenResults: () => void;
   onExportJson: () => void;
@@ -44,17 +51,22 @@ function MatchCard({
   match,
   teams,
   scoringMode,
-  onOpenMatch,
+  isFutevolei,
+  readOnly,
+  onSelectMatch,
 }: {
   match: Match;
   teams: Team[];
   scoringMode: 'sets' | 'goals';
-  onOpenMatch: (id: string) => void;
+  isFutevolei: boolean;
+  readOnly?: boolean;
+  onSelectMatch: (match: Match) => void;
 }) {
   const teamA = getTeam(teams, match.teamAId);
   const teamB = getTeam(teams, match.teamBId);
   const isFinished = match.status === 'finished';
-  const isReadyToPlay = Boolean(match.teamAId && match.teamBId) && !isFinished;
+  const isReadyToPlay =
+    !readOnly && Boolean(match.teamAId && match.teamBId) && !isFinished;
 
   if (match.isBye) {
     const byeWinner = teamA ?? teamB;
@@ -70,7 +82,7 @@ function MatchCard({
           </span>
         </div>
         <div className="flex items-center gap-2 font-bold text-sm text-slate-800 dark:text-slate-200">
-          <span>{byeWinner?.emblem ?? '⏭️'}</span>
+          {!isFutevolei && <span>{byeWinner?.emblem ?? '⏭️'}</span>}
           <span className="truncate">{byeWinner?.name ?? 'Passagem automática'}</span>
           <span className="ml-auto text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
             Avança
@@ -116,7 +128,7 @@ function MatchCard({
   return (
     <button
       type="button"
-      onClick={() => isReadyToPlay && onOpenMatch(match.id)}
+      onClick={() => isReadyToPlay && onSelectMatch(match)}
       disabled={!isReadyToPlay}
       className={`w-full text-left rounded-2xl border-2 ${borderAccent} bg-white/95 dark:bg-slate-900/95 p-3.5 shadow-sm transition ${
         isReadyToPlay
@@ -142,12 +154,18 @@ function MatchCard({
             }`}
           >
             <Play className="w-3 h-3 fill-current" />
-            {match.status === 'live' ? 'Ao vivo' : 'Jogar'}
+            {isFutevolei
+              ? 'Definir Vencedor'
+              : match.status === 'live'
+                ? 'Ao vivo'
+                : 'Jogar'}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shrink-0">
             <Clock className="w-3 h-3" />
-            Aguardando
+            {readOnly && Boolean(match.teamAId && match.teamBId)
+              ? 'Em breve'
+              : 'Aguardando'}
           </span>
         )}
       </div>
@@ -169,11 +187,15 @@ function MatchCard({
               <div className="flex items-center gap-2 min-w-0">
                 {row.team ? (
                   <>
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: row.team.color }}
-                    />
-                    <span className="text-sm">{row.team.emblem}</span>
+                    {!isFutevolei && (
+                      <>
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: row.team.color }}
+                        />
+                        <span className="text-sm">{row.team.emblem}</span>
+                      </>
+                    )}
                     <span className="text-sm text-slate-900 dark:text-white truncate">
                       {row.team.name}
                     </span>
@@ -189,15 +211,24 @@ function MatchCard({
                   </>
                 )}
               </div>
-              <span className="font-score text-xl font-extrabold text-slate-900 dark:text-white shrink-0">
-                {isFinished || match.status === 'live' ? row.score : '-'}
-              </span>
+
+              {isFutevolei ? (
+                isWinner && (
+                  <span className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-400 shrink-0">
+                    Venceu
+                  </span>
+                )
+              ) : (
+                <span className="font-score text-xl font-extrabold text-slate-900 dark:text-white shrink-0">
+                  {isFinished || match.status === 'live' ? row.score : '-'}
+                </span>
+              )}
             </div>
           );
         })}
       </div>
 
-      {scoringMode === 'sets' && isFinished && match.sets.length > 0 && (
+      {!isFutevolei && scoringMode === 'sets' && isFinished && match.sets.length > 0 && (
         <p className="text-[11px] font-semibold text-slate-400 mt-2 text-right">
           Sets: {match.sets.map((s) => `${s.scoreA}x${s.scoreB}`).join(' • ')}
         </p>
@@ -224,9 +255,11 @@ function BracketSection({
   rounds,
   teams,
   scoringMode,
+  isFutevolei,
+  readOnly,
   reverseColumnsOnDesktop,
   emptyNote,
-  onOpenMatch,
+  onSelectMatch,
 }: {
   title: string;
   subtitle?: string;
@@ -234,9 +267,11 @@ function BracketSection({
   rounds: BracketRound[];
   teams: Team[];
   scoringMode: 'sets' | 'goals';
+  isFutevolei: boolean;
+  readOnly?: boolean;
   reverseColumnsOnDesktop?: boolean;
   emptyNote?: string;
-  onOpenMatch: (id: string) => void;
+  onSelectMatch: (match: Match) => void;
 }) {
   return (
     <section className="space-y-3">
@@ -284,7 +319,9 @@ function BracketSection({
                     match={m}
                     teams={teams}
                     scoringMode={scoringMode}
-                    onOpenMatch={onOpenMatch}
+                    isFutevolei={isFutevolei}
+                    readOnly={readOnly}
+                    onSelectMatch={onSelectMatch}
                   />
                 ))}
               </div>
@@ -298,7 +335,9 @@ function BracketSection({
 
 export function BracketDashboard({
   tournament,
+  readOnly = false,
   onOpenMatch,
+  onSelectDirectWinner,
   onFinishManually,
   onOpenResults,
   onExportJson,
@@ -307,7 +346,13 @@ export function BracketDashboard({
   const [filter, setFilter] = useState<
     'all' | 'blocks' | 'winners' | 'losers' | 'finals'
   >('all');
+  const [directPickMatch, setDirectPickMatch] = useState<Match | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const isFutevolei = tournament.sport.id === 'futevolei';
   const sportName = getSportDisplayName(tournament.sport);
+  const publicUrl =
+    !readOnly && isPublicLinkActive(tournament) ? buildPublicWatchUrl(tournament) : '';
 
   const bracket = tournament.bracket;
   const koc = tournament.kingOfCourt;
@@ -324,8 +369,60 @@ export function BracketDashboard({
   }
   const blockEntries = Array.from(blocksMap.entries()).sort((a, b) => a[0] - b[0]);
 
+  const handleMatchAction = (match: Match) => {
+    if (readOnly) return;
+    if (isFutevolei) {
+      setDirectPickMatch(match);
+      return;
+    }
+    onOpenMatch(match.id);
+  };
+
+  const handleCopyPublicLink = async () => {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopiedLink(true);
+      window.setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      // Clipboard fallback ignored
+    }
+  };
+
+  const directTeamA = directPickMatch
+    ? getTeam(tournament.teams, directPickMatch.teamAId)
+    : undefined;
+  const directTeamB = directPickMatch
+    ? getTeam(tournament.teams, directPickMatch.teamBId)
+    : undefined;
+
   return (
     <main className="max-w-6xl mx-auto px-4 py-5 pb-28 space-y-5">
+      {/* Public Tracking Link Bar (only visible while tournament is active and not read-only) */}
+      {publicUrl && (
+        <section className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 p-3.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Link2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-extrabold text-emerald-900 dark:text-emerald-200">
+                Link público ao vivo (somente leitura)
+              </p>
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 truncate">
+                {publicUrl}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyPublicLink}
+            className="h-9 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shrink-0"
+          >
+            {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {copiedLink ? 'Copiado!' : 'Copiar Link'}
+          </button>
+        </section>
+      )}
+
       {/* Top Info + Quick Actions */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -334,24 +431,26 @@ export function BracketDashboard({
             ? 'Rei da Quadra'
             : `${finishedMatchesCount}/${allMatches.length} jogos concluídos`}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onExportJson}
-            className="h-9 px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold flex items-center gap-1.5 text-slate-700 dark:text-slate-200"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Backup JSON
-          </button>
-          <button
-            type="button"
-            onClick={onOpenReset}
-            className="h-9 px-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 text-xs font-bold flex items-center gap-1.5 text-rose-600 dark:text-rose-400"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reiniciar
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onExportJson}
+              className="h-9 px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold flex items-center gap-1.5 text-slate-700 dark:text-slate-200"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Backup JSON
+            </button>
+            <button
+              type="button"
+              onClick={onOpenReset}
+              className="h-9 px-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 text-xs font-bold flex items-center gap-1.5 text-rose-600 dark:text-rose-400"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reiniciar
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Finished Banner */}
@@ -371,20 +470,21 @@ export function BracketDashboard({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onOpenResults}
-            className="w-full sm:w-auto h-11 px-5 rounded-2xl bg-slate-950 text-white font-extrabold text-sm"
-          >
-            Ver Pódio e PDF
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={onOpenResults}
+              className="w-full sm:w-auto h-11 px-5 rounded-2xl bg-slate-950 text-white font-extrabold text-sm"
+            >
+              Ver Pódio e PDF
+            </button>
+          )}
         </div>
       )}
 
       {/* BRACKET MODE */}
       {tournament.format === 'bracket' && bracket && (
         <>
-          {/* Filter Pills */}
           <div className="flex gap-2 overflow-x-auto pb-1">
             {[
               { id: 'all', label: 'Tabela Completa' },
@@ -437,7 +537,9 @@ export function BracketDashboard({
                         match={m}
                         teams={tournament.teams}
                         scoringMode={tournament.sport.scoringMode}
-                        onOpenMatch={onOpenMatch}
+                        isFutevolei={isFutevolei}
+                        readOnly={readOnly}
+                        onSelectMatch={handleMatchAction}
                       />
                     ))}
                   </div>
@@ -455,7 +557,9 @@ export function BracketDashboard({
                 rounds={bracket.winnersRounds}
                 teams={tournament.teams}
                 scoringMode={tournament.sport.scoringMode}
-                onOpenMatch={onOpenMatch}
+                isFutevolei={isFutevolei}
+                readOnly={readOnly}
+                onSelectMatch={handleMatchAction}
               />
             )}
 
@@ -467,7 +571,9 @@ export function BracketDashboard({
               rounds={finalsRounds}
               teams={tournament.teams}
               scoringMode={tournament.sport.scoringMode}
-              onOpenMatch={onOpenMatch}
+              isFutevolei={isFutevolei}
+              readOnly={readOnly}
+              onSelectMatch={handleMatchAction}
             />
           )}
 
@@ -480,9 +586,11 @@ export function BracketDashboard({
                 rounds={bracket.losersRounds}
                 teams={tournament.teams}
                 scoringMode={tournament.sport.scoringMode}
+                isFutevolei={isFutevolei}
+                readOnly={readOnly}
                 reverseColumnsOnDesktop={bracket.isHybridGraph}
                 emptyNote="Os perdedores aparecerão aqui conforme os jogos da Chave dos Vencedores forem concluídos."
-                onOpenMatch={onOpenMatch}
+                onSelectMatch={handleMatchAction}
               />
             )}
         </>
@@ -516,7 +624,7 @@ export function BracketDashboard({
                         isKing ? 'border-amber-400' : 'border-white/10'
                       }`}
                     >
-                      <div className="text-3xl mb-1">{tm?.emblem ?? '⚽'}</div>
+                      {!isFutevolei && <div className="text-3xl mb-1">{tm?.emblem ?? '⚽'}</div>}
                       <p className="font-extrabold text-base sm:text-lg truncate">
                         {tm?.name ?? 'Time'}
                       </p>
@@ -528,9 +636,7 @@ export function BracketDashboard({
                     </div>
                   );
                 })[0]}
-                <div className="font-score text-3xl font-extrabold text-amber-400">
-                  VS
-                </div>
+                <div className="font-score text-3xl font-extrabold text-amber-400">VS</div>
                 {[koc.courtTeamAId, koc.courtTeamBId].map((tid, idx) => {
                   const tm = getTeam(tournament.teams, tid);
                   const isKing = tid && koc.currentKingTeamId === tid;
@@ -541,7 +647,7 @@ export function BracketDashboard({
                         isKing ? 'border-amber-400' : 'border-white/10'
                       }`}
                     >
-                      <div className="text-3xl mb-1">{tm?.emblem ?? '⚽'}</div>
+                      {!isFutevolei && <div className="text-3xl mb-1">{tm?.emblem ?? '⚽'}</div>}
                       <p className="font-extrabold text-base sm:text-lg truncate">
                         {tm?.name ?? 'Time'}
                       </p>
@@ -555,14 +661,19 @@ export function BracketDashboard({
                 })[1]}
               </div>
 
-              <button
-                type="button"
-                onClick={() => onOpenMatch(koc.currentMatchId!)}
-                className="w-full h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-base flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 active:scale-[0.99] transition"
-              >
-                <Swords className="w-5 h-5" />
-                Abrir Placar Ao Vivo
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = koc.matches.find((m) => m.id === koc.currentMatchId);
+                    if (current) handleMatchAction(current);
+                  }}
+                  className="w-full h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-base flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 active:scale-[0.99] transition"
+                >
+                  <Swords className="w-5 h-5" />
+                  {isFutevolei ? 'Definir Vencedor da Quadra' : 'Abrir Placar Ao Vivo'}
+                </button>
+              )}
             </section>
           )}
 
@@ -586,10 +697,8 @@ export function BracketDashboard({
                       key={`${tid}_${idx}`}
                       className="px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-xs font-bold flex items-center gap-2"
                     >
-                      <span className="text-amber-600 dark:text-amber-400">
-                        {idx + 1}º
-                      </span>
-                      <span>{tm?.emblem}</span>
+                      <span className="text-amber-600 dark:text-amber-400">{idx + 1}º</span>
+                      {!isFutevolei && <span>{tm?.emblem}</span>}
                       <span className="text-slate-900 dark:text-white">{tm?.name}</span>
                     </div>
                   );
@@ -614,14 +723,16 @@ export function BracketDashboard({
                       match={m}
                       teams={tournament.teams}
                       scoringMode={tournament.sport.scoringMode}
-                      onOpenMatch={onOpenMatch}
+                      isFutevolei={isFutevolei}
+                      readOnly={readOnly}
+                      onSelectMatch={handleMatchAction}
                     />
                   ))}
               </div>
             </section>
           )}
 
-          {tournament.status !== 'finished' && (
+          {!readOnly && tournament.status !== 'finished' && (
             <button
               type="button"
               onClick={onFinishManually}
@@ -631,6 +742,63 @@ export function BracketDashboard({
               Encerrar Rei da Quadra e Ver Campeão
             </button>
           )}
+        </div>
+      )}
+
+      {/* Direct Winner Selection Modal for Futevôlei (no score inputs) */}
+      {!readOnly && isFutevolei && directPickMatch && directTeamA && directTeamB && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Jogo {directPickMatch.matchNumber}
+                  {directPickMatch.stageLabel ? ` • ${directPickMatch.stageLabel}` : ''}
+                </p>
+                <h3 className="text-lg font-extrabold text-slate-900 dark:text-white mt-0.5">
+                  Quem venceu o confronto?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Toque na dupla vencedora para avançar automaticamente.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDirectPickMatch(null)}
+                className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {[directTeamA, directTeamB].map((tm) => (
+                <button
+                  key={tm.id}
+                  type="button"
+                  onClick={() => {
+                    onSelectDirectWinner?.(directPickMatch.id, tm.id);
+                    setDirectPickMatch(null);
+                  }}
+                  className="w-full min-h-[64px] px-5 py-3 rounded-2xl border-2 border-emerald-400 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/70 text-left flex items-center justify-between gap-3 active:scale-[0.98] transition"
+                >
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-base text-slate-900 dark:text-white truncate">
+                      {tm.name}
+                    </p>
+                    {tm.players.length > 0 && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                        {tm.players.map((p) => p.name).join(' • ')}
+                      </p>
+                    )}
+                  </div>
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-extrabold shrink-0">
+                    Venceu
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </main>

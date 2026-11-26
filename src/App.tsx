@@ -4,6 +4,7 @@ import { CourtGridBackground } from './components/CourtGridBackground';
 import { HistoryScreen } from './components/HistoryScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { LiveMatchScreen } from './components/LiveMatchScreen';
+import { PublicWatchScreen } from './components/PublicWatchScreen';
 import { ResetModal } from './components/ResetModal';
 import { ResultsScreen } from './components/ResultsScreen';
 import { SetupScreen, type SetupResult } from './components/SetupScreen';
@@ -20,6 +21,7 @@ import {
   startTournament,
   updateLiveMatchState,
 } from './engine/tournamentEngine';
+import { broadcastTournamentUpdate } from './services/liveSync';
 import { soundEngine } from './services/sound';
 import {
   exportTournamentJson,
@@ -46,7 +48,15 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  const [publicParams] = useState<{ tournamentId: string; token: string } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('acompanhar');
+    const token = params.get('token');
+    return id && token ? { tournamentId: id, token } : null;
+  });
+
+  const [showSplash, setShowSplash] = useState(!publicParams);
   const [screen, setScreen] = useState<Screen>('home');
   const [tournaments, setTournaments] = useState<Tournament[]>(() => loadTournaments());
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
@@ -68,8 +78,11 @@ export function App() {
   }, [settings]);
 
   useEffect(() => {
+    if (publicParams) return;
     saveTournaments(tournaments);
-  }, [tournaments]);
+    const active = tournaments.find((t) => t.id === activeTournamentId);
+    if (active) broadcastTournamentUpdate(active);
+  }, [tournaments, publicParams, activeTournamentId]);
 
   useEffect(() => {
     const standalone =
@@ -188,7 +201,9 @@ export function App() {
     }
   };
 
-  const headerMeta = getHeaderMeta();
+  const headerMeta = publicParams
+    ? { title: 'ArenaPro - Ao Vivo', subtitle: 'Acompanhamento público (somente leitura)' }
+    : getHeaderMeta();
 
   return (
     <div className="relative min-h-screen court-lines-light text-slate-900 dark:text-slate-100 transition-colors">
@@ -199,7 +214,7 @@ export function App() {
       <TopBar
         title={headerMeta.title}
         subtitle={headerMeta.subtitle}
-        onBack={handleBack()}
+        onBack={publicParams ? undefined : handleBack()}
         theme={settings.theme}
         onToggleTheme={() =>
           setSettings((s) => ({ ...s, theme: s.theme === 'dark' ? 'light' : 'dark' }))
@@ -209,6 +224,14 @@ export function App() {
         canInstall={Boolean(installPrompt) && !isStandalone}
         onInstallClick={handleInstallClick}
       />
+
+      {publicParams ? (
+        <PublicWatchScreen
+          tournamentId={publicParams.tournamentId}
+          token={publicParams.token}
+        />
+      ) : (
+        <>
 
       {toast && (
         <div className="fixed bottom-24 inset-x-4 max-w-sm mx-auto z-50 rounded-2xl bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 px-4 py-3 text-center text-xs font-extrabold shadow-2xl">
@@ -248,6 +271,19 @@ export function App() {
           onOpenMatch={(matchId) => {
             setActiveMatchId(matchId);
             setScreen('live_match');
+          }}
+          onSelectDirectWinner={(matchId, winnerId) => {
+            const nextState = finishMatch(activeTournament, matchId, {
+              winnerId,
+              scoreA: 0,
+              scoreB: 0,
+              sets: [],
+            });
+            soundEngine.playWhistle();
+            updateActiveTournament(() => nextState);
+            if (nextState.status === 'finished') {
+              setScreen('results');
+            }
           }}
           onFinishManually={() => {
             updateActiveTournament((t) => finishTournamentManually(t));
@@ -324,6 +360,8 @@ export function App() {
             }
           }}
         />
+      )}
+        </>
       )}
       </div>
     </div>

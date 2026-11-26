@@ -33,6 +33,7 @@ export function createTournament(input: CreateTournamentInput): Tournament {
   const now = Date.now();
   return {
     id: createId('trn'),
+    publicToken: createId('pub'),
     name: input.name.trim() || 'Torneio sem nome',
     sport: { ...input.sport },
     format: input.format,
@@ -1717,6 +1718,10 @@ export function finishTournamentManually(tournament: Tournament): Tournament {
   };
 }
 
+export function isPublicLinkActive(tournament: Tournament): boolean {
+  return tournament.status !== 'finished' && Boolean(tournament.publicToken);
+}
+
 export function resetTournament(
   tournament: Tournament,
   mode: 'matches_only' | 'all',
@@ -1725,6 +1730,7 @@ export function resetTournament(
   if (mode === 'all') {
     return {
       ...tournament,
+      publicToken: createId('pub'),
       teams: [],
       status: 'setup',
       updatedAt: now,

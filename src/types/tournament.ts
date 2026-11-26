@@ -140,6 +140,7 @@ export type TournamentStatus = 'setup' | 'in_progress' | 'finished';
 
 export interface Tournament {
   id: string;
+  publicToken?: string;
   name: string;
   sport: SportConfig;
   format: TournamentFormat;
