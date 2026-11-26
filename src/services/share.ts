@@ -38,6 +38,9 @@ export function buildWhatsappSummary(tournament: Tournament): string {
   if (standings[2]) {
     lines.push(`🥉 *3º Lugar:* ${standings[2].team.emblem} ${standings[2].team.name}`);
   }
+  if (tournament.fourthPlaceId && standings[3]) {
+    lines.push(`🏅 *4º Lugar:* ${standings[3].team.emblem} ${standings[3].team.name}`);
+  }
 
   if (tournament.sport.trackPlayerGoals && scorers.length > 0) {
     lines.push('');

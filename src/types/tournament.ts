@@ -55,7 +55,7 @@ export interface MatchStatEvent {
   timestamp: number;
 }
 
-export type BracketSide = 'winners' | 'losers' | 'king_of_court';
+export type BracketSide = 'winners' | 'losers' | 'finals' | 'king_of_court';
 
 export type MatchStatus = 'pending' | 'live' | 'finished';
 
@@ -64,8 +64,22 @@ export interface Match {
   matchNumber: number;
   side: BracketSide;
   roundIndex: number;
+  stageLabel?: string;
+  blockNumber?: number;
   teamAId: string | null;
   teamBId: string | null;
+  slotALabel?: string;
+  slotBLabel?: string;
+  slotAIsBye?: boolean;
+  slotBIsBye?: boolean;
+  destWinnerLabel?: string;
+  destLoserLabel?: string;
+  nextWinnerMatchNumber?: number;
+  nextWinnerSlot?: 'A' | 'B';
+  nextLoserMatchNumber?: number;
+  nextLoserSlot?: 'A' | 'B';
+  placementOnWin?: 1 | 3;
+  placementOnLoss?: 2 | 4;
   isBye: boolean;
   status: MatchStatus;
   scoreA: number;
@@ -82,7 +96,7 @@ export interface Match {
 export interface BracketRound {
   roundIndex: number;
   name: string;
-  side: 'winners' | 'losers';
+  side: 'winners' | 'losers' | 'finals';
   matches: Match[];
   processed: boolean;
 }
@@ -90,13 +104,17 @@ export interface BracketRound {
 export interface EliminationRecord {
   teamId: string;
   roundIndex: number;
-  side: 'winners' | 'losers';
+  side: 'winners' | 'losers' | 'finals';
+  matchNumber?: number;
   order: number;
 }
 
 export interface BracketState {
+  isHybridGraph?: boolean;
+  bracketSize?: number;
   winnersRounds: BracketRound[];
   losersRounds: BracketRound[];
+  finalsRounds?: BracketRound[];
   losersAdvancingPool: string[];
   losersStagingPool: string[];
   byeHistoryTeamIds: string[];
@@ -133,6 +151,8 @@ export interface Tournament {
   finishedAt?: number;
   championId?: string;
   runnerUpId?: string;
+  thirdPlaceId?: string;
+  fourthPlaceId?: string;
   bracket?: BracketState;
   kingOfCourt?: KingOfCourtState;
 }

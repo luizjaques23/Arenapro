@@ -112,6 +112,10 @@ export function TeamsScreen({
       ['Cauã', 'Murilo'],
       ['Gustavo', 'Enzo'],
       ['Yuri', 'Otávio'],
+      ['Rodrigo', 'Marcelo'],
+      ['Fábio', 'Arthur'],
+      ['Vinícius', 'Eduardo'],
+      ['Samuel', 'Davi'],
     ];
 
     const created: Team[] = Array.from({ length: needed }, (_, i) => {

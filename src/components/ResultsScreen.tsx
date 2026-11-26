@@ -35,9 +35,13 @@ export function ResultsScreen({
   const scorers = computeTopScorers(tournament);
   const champion = standings.find((s) => s.team.id === tournament.championId) ?? standings[0];
   const runnerUp = standings.find((s) => s.team.id === tournament.runnerUpId) ?? standings[1];
-  const thirdPlace = standings.find(
-    (s) => s.team.id !== champion?.team.id && s.team.id !== runnerUp?.team.id,
-  );
+  const thirdPlace =
+    (tournament.thirdPlaceId
+      ? standings.find((s) => s.team.id === tournament.thirdPlaceId)
+      : undefined) ??
+    standings.find(
+      (s) => s.team.id !== champion?.team.id && s.team.id !== runnerUp?.team.id,
+    );
 
   useEffect(() => {
     soundEngine.playVictory();

@@ -29,7 +29,7 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
   const [winByTwo, setWinByTwo] = useState(true);
   const [trackPlayerGoals, setTrackPlayerGoals] = useState(false);
   const [format, setFormat] = useState<TournamentFormat>('bracket');
-  const [targetTeamsCount, setTargetTeamsCount] = useState(8);
+  const [targetTeamsCount, setTargetTeamsCount] = useState(16);
 
   const handleSelectSport = (id: SportId) => {
     setSportId(id);
@@ -246,10 +246,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
               </div>
               <div>
                 <p className="font-extrabold text-sm text-slate-900 dark:text-white">
-                  Chaveamento (Vencedores x Perdedores)
+                  Chaveamento Híbrido (Vencedores x Repescagem + Finais)
                 </p>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                  Quem ganha fica na chave de cima. Quem perde vai pro outro lado (repescagem). Suporta BYE.
+                  Eliminatória dupla até as Semifinais (cruzamento anti-revanche) e Fase Final com 3º/4º e Grande Final (16 times = 30 jogos).
                 </p>
               </div>
             </button>

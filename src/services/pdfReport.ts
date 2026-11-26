@@ -193,17 +193,24 @@ export function generateTournamentPdf(tournament: Tournament): string {
 
     for (const m of matches) {
       ensureSpace(8);
-      const nameA = getTeamName(tournament.teams, m.teamAId);
-      const nameB = m.isBye ? 'BYE' : getTeamName(tournament.teams, m.teamBId);
+      const nameA = m.teamAId
+        ? getTeamName(tournament.teams, m.teamAId)
+        : (m.slotALabel ?? 'A definir');
+      const nameB = m.isBye
+        ? 'BYE'
+        : m.teamBId
+          ? getTeamName(tournament.teams, m.teamBId)
+          : (m.slotBLabel ?? 'A definir');
       const scoreText = formatMatchScore(m, tournament.sport.scoringMode);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.8);
       doc.setTextColor(51, 65, 85);
+      const stagePrefix = m.stageLabel ? ` (${m.stageLabel})` : '';
       const label = m.isBye
-        ? `Jogo ${m.matchNumber}: ${nameA} — Avanço automático (BYE)`
-        : `Jogo ${m.matchNumber}: ${nameA}  vs  ${nameB}`;
-      doc.text(label.slice(0, 62), margin + 4, y + 4);
+        ? `Jogo ${m.matchNumber}${stagePrefix}: ${nameA} — Avanço automático (BYE)`
+        : `Jogo ${m.matchNumber}${stagePrefix}: ${nameA}  vs  ${nameB}`;
+      doc.text(label.slice(0, 66), margin + 4, y + 4);
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(15, 23, 42);
@@ -218,10 +225,13 @@ export function generateTournamentPdf(tournament: Tournament): string {
 
   if (tournament.format === 'bracket' && tournament.bracket) {
     for (const r of tournament.bracket.winnersRounds) {
-      printMatchList(`Chave de Vencedores — ${r.name}`, r.matches, [16, 185, 129]);
+      printMatchList(`1. Chave dos Vencedores — ${r.name}`, r.matches, [16, 185, 129]);
     }
     for (const r of tournament.bracket.losersRounds) {
-      printMatchList(`Chave de Baixo (Repescagem) — ${r.name}`, r.matches, [245, 158, 11]);
+      printMatchList(`2. Chave da Repescagem — ${r.name}`, r.matches, [245, 158, 11]);
+    }
+    for (const r of tournament.bracket.finalsRounds ?? []) {
+      printMatchList(`3. Fase Final — ${r.name}`, r.matches, [14, 165, 233]);
     }
   } else if (tournament.kingOfCourt) {
     printMatchList(

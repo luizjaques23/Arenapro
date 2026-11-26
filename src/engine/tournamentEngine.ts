@@ -1,6 +1,7 @@
 import type {
   BracketRound,
   BracketState,
+  EliminationRecord,
   KingOfCourtState,
   Match,
   MatchStatEvent,
@@ -60,8 +61,22 @@ function createMatchObject(params: {
   matchNumber: number;
   side: Match['side'];
   roundIndex: number;
+  stageLabel?: string;
+  blockNumber?: number;
   teamAId: string | null;
   teamBId: string | null;
+  slotALabel?: string;
+  slotBLabel?: string;
+  slotAIsBye?: boolean;
+  slotBIsBye?: boolean;
+  destWinnerLabel?: string;
+  destLoserLabel?: string;
+  nextWinnerMatchNumber?: number;
+  nextWinnerSlot?: 'A' | 'B';
+  nextLoserMatchNumber?: number;
+  nextLoserSlot?: 'A' | 'B';
+  placementOnWin?: 1 | 3;
+  placementOnLoss?: 2 | 4;
   isBye?: boolean;
   sport: SportConfig;
 }): Match {
@@ -71,8 +86,22 @@ function createMatchObject(params: {
     matchNumber: params.matchNumber,
     side: params.side,
     roundIndex: params.roundIndex,
+    stageLabel: params.stageLabel,
+    blockNumber: params.blockNumber,
     teamAId: params.teamAId,
     teamBId: params.teamBId,
+    slotALabel: params.slotALabel,
+    slotBLabel: params.slotBLabel,
+    slotAIsBye: params.slotAIsBye,
+    slotBIsBye: params.slotBIsBye,
+    destWinnerLabel: params.destWinnerLabel,
+    destLoserLabel: params.destLoserLabel,
+    nextWinnerMatchNumber: params.nextWinnerMatchNumber,
+    nextWinnerSlot: params.nextWinnerSlot,
+    nextLoserMatchNumber: params.nextLoserMatchNumber,
+    nextLoserSlot: params.nextLoserSlot,
+    placementOnWin: params.placementOnWin,
+    placementOnLoss: params.placementOnLoss,
     isBye,
     status: isBye ? 'finished' : 'pending',
     scoreA: 0,
@@ -86,10 +115,1086 @@ function createMatchObject(params: {
   };
 }
 
+interface HybridNodeSpec {
+  matchNumber: number;
+  side: 'winners' | 'losers' | 'finals';
+  roundIndex: number;
+  roundName: string;
+  stageLabel: string;
+  blockNumber: number;
+  entryAIndex?: number; // 0-based index into initial bracket slots
+  entryBIndex?: number;
+  slotALabel: string;
+  slotBLabel: string;
+  destWinnerLabel: string;
+  destLoserLabel: string;
+  nextWinnerMatchNumber?: number;
+  nextWinnerSlot?: 'A' | 'B';
+  nextLoserMatchNumber?: number;
+  nextLoserSlot?: 'A' | 'B';
+  placementOnWin?: 1 | 3;
+  placementOnLoss?: 2 | 4;
+}
+
 /**
- * Picks one team to receive a BYE when teamIds.length is odd,
- * prioritizing teams that have not received a BYE yet.
+ * Official 16-Team / 30-Match Hybrid Double-Elimination -> Single-Elimination Final Four Blueprint
+ * Matches 1–26: Double Elimination (Winners Left, Repescagem Right with anti-revanche inversion & crossover)
+ * Matches 27–30: Single Elimination Semifinals, 3rd/4th Match, and Grand Final (1st/2nd)
  */
+const HYBRID_16_SPECS: HybridNodeSpec[] = [
+  // 1. Chave dos Vencedores — Rodada 1 (Jogos 1 a 8) — Bloco 1
+  {
+    matchNumber: 1,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 0,
+    entryBIndex: 1,
+    slotALabel: 'Entrada 1',
+    slotBLabel: 'Entrada 2',
+    destWinnerLabel: 'V1 → Jogo 9',
+    destLoserLabel: 'P1 → Jogo 16',
+    nextWinnerMatchNumber: 9,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 16,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 2,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 2,
+    entryBIndex: 3,
+    slotALabel: 'Entrada 3',
+    slotBLabel: 'Entrada 4',
+    destWinnerLabel: 'V2 → Jogo 9',
+    destLoserLabel: 'P2 → Jogo 16',
+    nextWinnerMatchNumber: 9,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 16,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 3,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 4,
+    entryBIndex: 5,
+    slotALabel: 'Entrada 5',
+    slotBLabel: 'Entrada 6',
+    destWinnerLabel: 'V3 → Jogo 10',
+    destLoserLabel: 'P3 → Jogo 15',
+    nextWinnerMatchNumber: 10,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 15,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 4,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 6,
+    entryBIndex: 7,
+    slotALabel: 'Entrada 7',
+    slotBLabel: 'Entrada 8',
+    destWinnerLabel: 'V4 → Jogo 10',
+    destLoserLabel: 'P4 → Jogo 15',
+    nextWinnerMatchNumber: 10,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 15,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 5,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 8,
+    entryBIndex: 9,
+    slotALabel: 'Entrada 9',
+    slotBLabel: 'Entrada 10',
+    destWinnerLabel: 'V5 → Jogo 11',
+    destLoserLabel: 'P5 → Jogo 14',
+    nextWinnerMatchNumber: 11,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 14,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 6,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 10,
+    entryBIndex: 11,
+    slotALabel: 'Entrada 11',
+    slotBLabel: 'Entrada 12',
+    destWinnerLabel: 'V6 → Jogo 11',
+    destLoserLabel: 'P6 → Jogo 14',
+    nextWinnerMatchNumber: 11,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 14,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 7,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 12,
+    entryBIndex: 13,
+    slotALabel: 'Entrada 13',
+    slotBLabel: 'Entrada 14',
+    destWinnerLabel: 'V7 → Jogo 12',
+    destLoserLabel: 'P7 → Jogo 13',
+    nextWinnerMatchNumber: 12,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 13,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 8,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 14,
+    entryBIndex: 15,
+    slotALabel: 'Entrada 15',
+    slotBLabel: 'Entrada 16',
+    destWinnerLabel: 'V8 → Jogo 12',
+    destLoserLabel: 'P8 → Jogo 13',
+    nextWinnerMatchNumber: 12,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 13,
+    nextLoserSlot: 'A',
+  },
+
+  // Chave dos Vencedores — Rodada 2 (Jogos 9 a 12) — Bloco 2
+  {
+    matchNumber: 9,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Rodada 2',
+    stageLabel: 'Rodada 2',
+    blockNumber: 2,
+    slotALabel: 'V1',
+    slotBLabel: 'V2',
+    destWinnerLabel: 'V9 → Jogo 21',
+    destLoserLabel: 'P9 → Jogo 17',
+    nextWinnerMatchNumber: 21,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 17,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 10,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Rodada 2',
+    stageLabel: 'Rodada 2',
+    blockNumber: 2,
+    slotALabel: 'V3',
+    slotBLabel: 'V4',
+    destWinnerLabel: 'V10 → Jogo 21',
+    destLoserLabel: 'P10 → Jogo 18',
+    nextWinnerMatchNumber: 21,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 18,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 11,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Rodada 2',
+    stageLabel: 'Rodada 2',
+    blockNumber: 2,
+    slotALabel: 'V5',
+    slotBLabel: 'V6',
+    destWinnerLabel: 'V11 → Jogo 22',
+    destLoserLabel: 'P11 → Jogo 19',
+    nextWinnerMatchNumber: 22,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 19,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 12,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Rodada 2',
+    stageLabel: 'Rodada 2',
+    blockNumber: 2,
+    slotALabel: 'V7',
+    slotBLabel: 'V8',
+    destWinnerLabel: 'V12 → Jogo 22',
+    destLoserLabel: 'P12 → Jogo 20',
+    nextWinnerMatchNumber: 22,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 20,
+    nextLoserSlot: 'B',
+  },
+
+  // Chave dos Vencedores — Classificatórios A e B (Jogos 21 e 22) — Bloco 3
+  {
+    matchNumber: 21,
+    side: 'winners',
+    roundIndex: 2,
+    roundName: 'Classificatórios Vencedores',
+    stageLabel: 'Classificatório A',
+    blockNumber: 3,
+    slotALabel: 'V9',
+    slotBLabel: 'V10',
+    destWinnerLabel: 'V21 → Semifinal A (27)',
+    destLoserLabel: 'P21 → Repescagem B (26)',
+    nextWinnerMatchNumber: 27,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 26,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 22,
+    side: 'winners',
+    roundIndex: 2,
+    roundName: 'Classificatórios Vencedores',
+    stageLabel: 'Classificatório B',
+    blockNumber: 3,
+    slotALabel: 'V11',
+    slotBLabel: 'V12',
+    destWinnerLabel: 'V22 → Semifinal B (28)',
+    destLoserLabel: 'P22 → Repescagem A (25)',
+    nextWinnerMatchNumber: 28,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 25,
+    nextLoserSlot: 'A',
+  },
+
+  // 2. Chave da Repescagem — R1 Invertida (Jogos 13 a 16) — Bloco 2
+  {
+    matchNumber: 13,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P8',
+    slotBLabel: 'P7',
+    destWinnerLabel: 'V13 → Jogo 17',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 17,
+    nextWinnerSlot: 'A',
+  },
+  {
+    matchNumber: 14,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P6',
+    slotBLabel: 'P5',
+    destWinnerLabel: 'V14 → Jogo 18',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 18,
+    nextWinnerSlot: 'A',
+  },
+  {
+    matchNumber: 15,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P4',
+    slotBLabel: 'P3',
+    destWinnerLabel: 'V15 → Jogo 19',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 19,
+    nextWinnerSlot: 'A',
+  },
+  {
+    matchNumber: 16,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P2',
+    slotBLabel: 'P1',
+    destWinnerLabel: 'V16 → Jogo 20',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 20,
+    nextWinnerSlot: 'A',
+  },
+
+  // Repescagem R2 (Jogos 17 a 20) — Bloco 3
+  {
+    matchNumber: 17,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Repescagem R2',
+    stageLabel: 'Repescagem R2',
+    blockNumber: 3,
+    slotALabel: 'V13',
+    slotBLabel: 'P9',
+    destWinnerLabel: 'V17 → Jogo 23',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 23,
+    nextWinnerSlot: 'A',
+  },
+  {
+    matchNumber: 18,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Repescagem R2',
+    stageLabel: 'Repescagem R2',
+    blockNumber: 3,
+    slotALabel: 'V14',
+    slotBLabel: 'P10',
+    destWinnerLabel: 'V18 → Jogo 23',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 23,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 19,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Repescagem R2',
+    stageLabel: 'Repescagem R2',
+    blockNumber: 3,
+    slotALabel: 'V15',
+    slotBLabel: 'P11',
+    destWinnerLabel: 'V19 → Jogo 24',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 24,
+    nextWinnerSlot: 'A',
+  },
+  {
+    matchNumber: 20,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Repescagem R2',
+    stageLabel: 'Repescagem R2',
+    blockNumber: 3,
+    slotALabel: 'V16',
+    slotBLabel: 'P12',
+    destWinnerLabel: 'V20 → Jogo 24',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 24,
+    nextWinnerSlot: 'B',
+  },
+
+  // Repescagem R3 (Jogos 23 e 24) — Bloco 4
+  {
+    matchNumber: 23,
+    side: 'losers',
+    roundIndex: 2,
+    roundName: 'Repescagem R3',
+    stageLabel: 'Repescagem R3',
+    blockNumber: 4,
+    slotALabel: 'V17',
+    slotBLabel: 'V18',
+    destWinnerLabel: 'V23 → Jogo 25',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 25,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 24,
+    side: 'losers',
+    roundIndex: 2,
+    roundName: 'Repescagem R3',
+    stageLabel: 'Repescagem R3',
+    blockNumber: 4,
+    slotALabel: 'V19',
+    slotBLabel: 'V20',
+    destWinnerLabel: 'V24 → Jogo 26',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 26,
+    nextWinnerSlot: 'B',
+  },
+
+  // Classificatórios Repescagem A e B com cruzamento P22/P21 (Jogos 25 e 26) — Bloco 5
+  {
+    matchNumber: 25,
+    side: 'losers',
+    roundIndex: 3,
+    roundName: 'Classificatórios Repescagem',
+    stageLabel: 'Classif. Repescagem A',
+    blockNumber: 5,
+    slotALabel: 'P22',
+    slotBLabel: 'V23',
+    destWinnerLabel: 'V25 → Semifinal A (27)',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 27,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 26,
+    side: 'losers',
+    roundIndex: 3,
+    roundName: 'Classificatórios Repescagem',
+    stageLabel: 'Classif. Repescagem B',
+    blockNumber: 5,
+    slotALabel: 'P21',
+    slotBLabel: 'V24',
+    destWinnerLabel: 'V26 → Semifinal B (28)',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 28,
+    nextWinnerSlot: 'B',
+  },
+
+  // 3. Fase Final Eliminatória Simples (Jogos 27 a 30) — Blocos 6 e 7
+  {
+    matchNumber: 27,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal A',
+    blockNumber: 6,
+    slotALabel: 'V21',
+    slotBLabel: 'V25',
+    destWinnerLabel: 'V27 → Final (30)',
+    destLoserLabel: 'P27 → 3º/4º (29)',
+    nextWinnerMatchNumber: 30,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 29,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 28,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal B',
+    blockNumber: 6,
+    slotALabel: 'V22',
+    slotBLabel: 'V26',
+    destWinnerLabel: 'V28 → Final (30)',
+    destLoserLabel: 'P28 → 3º/4º (29)',
+    nextWinnerMatchNumber: 30,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 29,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 29,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Disputa de 3º/4º',
+    blockNumber: 7,
+    slotALabel: 'P27',
+    slotBLabel: 'P28',
+    destWinnerLabel: '3º Lugar',
+    destLoserLabel: '4º Lugar',
+    placementOnWin: 3,
+    placementOnLoss: 4,
+  },
+  {
+    matchNumber: 30,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Final (1º/2º)',
+    blockNumber: 7,
+    slotALabel: 'V27',
+    slotBLabel: 'V28',
+    destWinnerLabel: 'Campeão (1º)',
+    destLoserLabel: 'Vice (2º)',
+    placementOnWin: 1,
+    placementOnLoss: 2,
+  },
+];
+
+/**
+ * Analogous 8-Team / 14-Match Hybrid Double-Elimination -> Semifinals -> 3rd/4th + Final
+ */
+const HYBRID_8_SPECS: HybridNodeSpec[] = [
+  {
+    matchNumber: 1,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 0,
+    entryBIndex: 1,
+    slotALabel: 'Entrada 1',
+    slotBLabel: 'Entrada 2',
+    destWinnerLabel: 'V1 → Jogo 7',
+    destLoserLabel: 'P1 → Jogo 6',
+    nextWinnerMatchNumber: 7,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 6,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 2,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 2,
+    entryBIndex: 3,
+    slotALabel: 'Entrada 3',
+    slotBLabel: 'Entrada 4',
+    destWinnerLabel: 'V2 → Jogo 7',
+    destLoserLabel: 'P2 → Jogo 6',
+    nextWinnerMatchNumber: 7,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 6,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 3,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 4,
+    entryBIndex: 5,
+    slotALabel: 'Entrada 5',
+    slotBLabel: 'Entrada 6',
+    destWinnerLabel: 'V3 → Jogo 8',
+    destLoserLabel: 'P3 → Jogo 5',
+    nextWinnerMatchNumber: 8,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 5,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 4,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 6,
+    entryBIndex: 7,
+    slotALabel: 'Entrada 7',
+    slotBLabel: 'Entrada 8',
+    destWinnerLabel: 'V4 → Jogo 8',
+    destLoserLabel: 'P4 → Jogo 5',
+    nextWinnerMatchNumber: 8,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 5,
+    nextLoserSlot: 'A',
+  },
+  // Repescagem R1 invertida (Jogos 5 e 6) — Bloco 2
+  {
+    matchNumber: 5,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P4',
+    slotBLabel: 'P3',
+    destWinnerLabel: 'V5 → Jogo 9',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 9,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 6,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P2',
+    slotBLabel: 'P1',
+    destWinnerLabel: 'V6 → Jogo 10',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 10,
+    nextWinnerSlot: 'B',
+  },
+  // Classificatórios Vencedores (Jogos 7 e 8) — Bloco 2
+  {
+    matchNumber: 7,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Classificatórios Vencedores',
+    stageLabel: 'Classificatório A',
+    blockNumber: 2,
+    slotALabel: 'V1',
+    slotBLabel: 'V2',
+    destWinnerLabel: 'V7 → Semifinal A (11)',
+    destLoserLabel: 'P7 → Repescagem B (10)',
+    nextWinnerMatchNumber: 11,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 10,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 8,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Classificatórios Vencedores',
+    stageLabel: 'Classificatório B',
+    blockNumber: 2,
+    slotALabel: 'V3',
+    slotBLabel: 'V4',
+    destWinnerLabel: 'V8 → Semifinal B (12)',
+    destLoserLabel: 'P8 → Repescagem A (9)',
+    nextWinnerMatchNumber: 12,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 9,
+    nextLoserSlot: 'A',
+  },
+  // Classificatórios Repescagem cruzados (Jogos 9 e 10) — Bloco 3
+  {
+    matchNumber: 9,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Classificatórios Repescagem',
+    stageLabel: 'Classif. Repescagem A',
+    blockNumber: 3,
+    slotALabel: 'P8',
+    slotBLabel: 'V5',
+    destWinnerLabel: 'V9 → Semifinal A (11)',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 11,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 10,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Classificatórios Repescagem',
+    stageLabel: 'Classif. Repescagem B',
+    blockNumber: 3,
+    slotALabel: 'P7',
+    slotBLabel: 'V6',
+    destWinnerLabel: 'V10 → Semifinal B (12)',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 12,
+    nextWinnerSlot: 'B',
+  },
+  // Fase Final (Jogos 11 a 14) — Blocos 4 e 5
+  {
+    matchNumber: 11,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal A',
+    blockNumber: 4,
+    slotALabel: 'V7',
+    slotBLabel: 'V9',
+    destWinnerLabel: 'V11 → Final (14)',
+    destLoserLabel: 'P11 → 3º/4º (13)',
+    nextWinnerMatchNumber: 14,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 13,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 12,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal B',
+    blockNumber: 4,
+    slotALabel: 'V8',
+    slotBLabel: 'V10',
+    destWinnerLabel: 'V12 → Final (14)',
+    destLoserLabel: 'P12 → 3º/4º (13)',
+    nextWinnerMatchNumber: 14,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 13,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 13,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Disputa de 3º/4º',
+    blockNumber: 5,
+    slotALabel: 'P11',
+    slotBLabel: 'P12',
+    destWinnerLabel: '3º Lugar',
+    destLoserLabel: '4º Lugar',
+    placementOnWin: 3,
+    placementOnLoss: 4,
+  },
+  {
+    matchNumber: 14,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Final (1º/2º)',
+    blockNumber: 5,
+    slotALabel: 'V11',
+    slotBLabel: 'V12',
+    destWinnerLabel: 'Campeão (1º)',
+    destLoserLabel: 'Vice (2º)',
+    placementOnWin: 1,
+    placementOnLoss: 2,
+  },
+];
+
+/**
+ * 4-Team Final Four (Semifinals + 3rd/4th + Final)
+ */
+const HYBRID_4_SPECS: HybridNodeSpec[] = [
+  {
+    matchNumber: 1,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal A',
+    blockNumber: 1,
+    entryAIndex: 0,
+    entryBIndex: 1,
+    slotALabel: 'Entrada 1',
+    slotBLabel: 'Entrada 2',
+    destWinnerLabel: 'V1 → Final (4)',
+    destLoserLabel: 'P1 → 3º/4º (3)',
+    nextWinnerMatchNumber: 4,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 3,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 2,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal B',
+    blockNumber: 1,
+    entryAIndex: 2,
+    entryBIndex: 3,
+    slotALabel: 'Entrada 3',
+    slotBLabel: 'Entrada 4',
+    destWinnerLabel: 'V2 → Final (4)',
+    destLoserLabel: 'P2 → 3º/4º (3)',
+    nextWinnerMatchNumber: 4,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 3,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 3,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Disputa de 3º/4º',
+    blockNumber: 2,
+    slotALabel: 'P1',
+    slotBLabel: 'P2',
+    destWinnerLabel: '3º Lugar',
+    destLoserLabel: '4º Lugar',
+    placementOnWin: 3,
+    placementOnLoss: 4,
+  },
+  {
+    matchNumber: 4,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Final (1º/2º)',
+    blockNumber: 2,
+    slotALabel: 'V1',
+    slotBLabel: 'V2',
+    destWinnerLabel: 'Campeão (1º)',
+    destLoserLabel: 'Vice (2º)',
+    placementOnWin: 1,
+    placementOnLoss: 2,
+  },
+];
+
+/**
+ * Distributes N teams into `size` entry slots (4, 8, or 16) so that:
+ * - When N === size: exact 1..size order is preserved.
+ * - When N < size: every R1 match gets at least one real team before any match gets a second team,
+ *   distributing BYEs evenly across top and bottom halves so no two BYEs face each other in R1.
+ */
+function buildEntrySlots(teamIds: string[], size: 4 | 8 | 16): Array<string | 'BYE'> {
+  if (teamIds.length === size) {
+    return [...teamIds];
+  }
+  const matchCount = size / 2;
+  const slots: Array<string | 'BYE'> = Array.from({ length: size }, () => 'BYE');
+
+  const spreadOrder =
+    matchCount === 8
+      ? [0, 4, 2, 6, 1, 5, 3, 7]
+      : matchCount === 4
+        ? [0, 2, 1, 3]
+        : [0, 1];
+
+  let idx = 0;
+  // First put 1 team in slot A of each R1 match
+  for (let m = 0; m < matchCount && idx < teamIds.length; m += 1) {
+    const matchIdx = spreadOrder[m];
+    slots[matchIdx * 2] = teamIds[idx++];
+  }
+  // Then fill slot B across evenly spread matches
+  for (let m = 0; m < matchCount && idx < teamIds.length; m += 1) {
+    const matchIdx = spreadOrder[m];
+    slots[matchIdx * 2 + 1] = teamIds[idx++];
+  }
+  return slots;
+}
+
+function buildHybridBracketState(
+  teamIds: string[],
+  size: 4 | 8 | 16,
+  specs: HybridNodeSpec[],
+  sport: SportConfig,
+): BracketState {
+  const entries = buildEntrySlots(teamIds, size);
+
+  const matches: Match[] = specs.map((spec) => {
+    const entryA = spec.entryAIndex !== undefined ? entries[spec.entryAIndex] : undefined;
+    const entryB = spec.entryBIndex !== undefined ? entries[spec.entryBIndex] : undefined;
+
+    return createMatchObject({
+      matchNumber: spec.matchNumber,
+      side: spec.side,
+      roundIndex: spec.roundIndex,
+      stageLabel: spec.stageLabel,
+      blockNumber: spec.blockNumber,
+      teamAId: entryA && entryA !== 'BYE' ? entryA : null,
+      teamBId: entryB && entryB !== 'BYE' ? entryB : null,
+      slotAIsBye: entryA === 'BYE',
+      slotBIsBye: entryB === 'BYE',
+      slotALabel: spec.slotALabel,
+      slotBLabel: spec.slotBLabel,
+      destWinnerLabel: spec.destWinnerLabel,
+      destLoserLabel: spec.destLoserLabel,
+      nextWinnerMatchNumber: spec.nextWinnerMatchNumber,
+      nextWinnerSlot: spec.nextWinnerSlot,
+      nextLoserMatchNumber: spec.nextLoserMatchNumber,
+      nextLoserSlot: spec.nextLoserSlot,
+      placementOnWin: spec.placementOnWin,
+      placementOnLoss: spec.placementOnLoss,
+      sport,
+    });
+  });
+
+  const groupRounds = (side: 'winners' | 'losers' | 'finals'): BracketRound[] => {
+    const sideSpecs = specs.filter((s) => s.side === side);
+    const roundIndices = Array.from(new Set(sideSpecs.map((s) => s.roundIndex))).sort(
+      (a, b) => a - b,
+    );
+    return roundIndices.map((rIdx) => {
+      const roundName =
+        sideSpecs.find((s) => s.roundIndex === rIdx)?.roundName ?? `Rodada ${rIdx + 1}`;
+      const roundMatches = matches
+        .filter((m) => m.side === side && m.roundIndex === rIdx)
+        .sort((a, b) => a.matchNumber - b.matchNumber);
+      return {
+        roundIndex: rIdx,
+        name: roundName,
+        side,
+        matches: roundMatches,
+        processed: false,
+      };
+    });
+  };
+
+  return {
+    isHybridGraph: true,
+    bracketSize: size,
+    winnersRounds: groupRounds('winners'),
+    losersRounds: groupRounds('losers'),
+    finalsRounds: groupRounds('finals'),
+    losersAdvancingPool: [],
+    losersStagingPool: [],
+    byeHistoryTeamIds: [],
+    eliminated: [],
+    nextMatchNumber: specs.length + 1,
+  };
+}
+
+/**
+ * Propagates winners, losers, BYEs, eliminations, and final 1st–4th placements
+ * through the Hybrid DAG bracket until reaching a fixed point.
+ */
+function propagateHybridBracket(tournament: Tournament): Tournament {
+  const bracket = tournament.bracket;
+  if (!bracket || !bracket.isHybridGraph) return tournament;
+
+  const winnersRounds = bracket.winnersRounds.map((r) => ({
+    ...r,
+    matches: r.matches.map((m) => ({ ...m })),
+  }));
+  const losersRounds = bracket.losersRounds.map((r) => ({
+    ...r,
+    matches: r.matches.map((m) => ({ ...m })),
+  }));
+  const finalsRounds = (bracket.finalsRounds ?? []).map((r) => ({
+    ...r,
+    matches: r.matches.map((m) => ({ ...m })),
+  }));
+
+  const allMatches = [
+    ...winnersRounds.flatMap((r) => r.matches),
+    ...losersRounds.flatMap((r) => r.matches),
+    ...finalsRounds.flatMap((r) => r.matches),
+  ];
+  const byNumber = new Map<number, Match>();
+  for (const m of allMatches) {
+    byNumber.set(m.matchNumber, m);
+  }
+
+  const eliminated: EliminationRecord[] = [...bracket.eliminated];
+  const hasEliminated = (teamId: string) => eliminated.some((e) => e.teamId === teamId);
+
+  let championId = tournament.championId;
+  let runnerUpId = tournament.runnerUpId;
+  let thirdPlaceId = tournament.thirdPlaceId;
+  let fourthPlaceId = tournament.fourthPlaceId;
+
+  const assignSlot = (
+    target: Match,
+    slot: 'A' | 'B',
+    outcome: { kind: 'team'; teamId: string } | { kind: 'bye' },
+  ): boolean => {
+    if (slot === 'A') {
+      if (outcome.kind === 'team') {
+        if (target.teamAId === outcome.teamId && !target.slotAIsBye) return false;
+        target.teamAId = outcome.teamId;
+        target.slotAIsBye = false;
+        return true;
+      }
+      if (target.slotAIsBye && target.teamAId === null) return false;
+      target.teamAId = null;
+      target.slotAIsBye = true;
+      return true;
+    }
+
+    if (outcome.kind === 'team') {
+      if (target.teamBId === outcome.teamId && !target.slotBIsBye) return false;
+      target.teamBId = outcome.teamId;
+      target.slotBIsBye = false;
+      return true;
+    }
+    if (target.slotBIsBye && target.teamBId === null) return false;
+    target.teamBId = null;
+    target.slotBIsBye = true;
+    return true;
+  };
+
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 100) {
+    changed = false;
+    guard += 1;
+
+    // Auto-finish any pending match where both slots are resolved and at least one is BYE
+    for (const m of allMatches) {
+      if (m.status !== 'pending') continue;
+      const aResolved = m.teamAId !== null || Boolean(m.slotAIsBye);
+      const bResolved = m.teamBId !== null || Boolean(m.slotBIsBye);
+      if (aResolved && bResolved && (m.slotAIsBye || m.slotBIsBye)) {
+        m.isBye = true;
+        m.status = 'finished';
+        m.winnerId = m.teamAId ?? m.teamBId ?? undefined;
+        m.loserId = undefined;
+        m.finishedAt = Date.now();
+        changed = true;
+      }
+    }
+
+    // Route outcomes from finished matches
+    for (const m of allMatches) {
+      if (m.status !== 'finished') continue;
+
+      const winOutcome: { kind: 'team'; teamId: string } | { kind: 'bye' } = m.winnerId
+        ? { kind: 'team', teamId: m.winnerId }
+        : { kind: 'bye' };
+
+      const loseOutcome: { kind: 'team'; teamId: string } | { kind: 'bye' } =
+        !m.isBye && m.loserId ? { kind: 'team', teamId: m.loserId } : { kind: 'bye' };
+
+      if (m.nextWinnerMatchNumber && m.nextWinnerSlot) {
+        const nextW = byNumber.get(m.nextWinnerMatchNumber);
+        if (nextW && assignSlot(nextW, m.nextWinnerSlot, winOutcome)) {
+          changed = true;
+        }
+      }
+
+      if (m.nextLoserMatchNumber && m.nextLoserSlot) {
+        const nextL = byNumber.get(m.nextLoserMatchNumber);
+        if (nextL && assignSlot(nextL, m.nextLoserSlot, loseOutcome)) {
+          changed = true;
+        }
+      } else if (
+        !m.nextLoserMatchNumber &&
+        !m.placementOnLoss &&
+        !m.isBye &&
+        m.loserId &&
+        !hasEliminated(m.loserId)
+      ) {
+        eliminated.push({
+          teamId: m.loserId,
+          roundIndex: m.roundIndex,
+          side: m.side === 'king_of_court' ? 'losers' : m.side,
+          matchNumber: m.matchNumber,
+          order: eliminated.length + 1,
+        });
+        changed = true;
+      }
+
+      if (m.placementOnWin === 1 && m.winnerId) championId = m.winnerId;
+      if (m.placementOnLoss === 2 && m.loserId) runnerUpId = m.loserId;
+      if (m.placementOnWin === 3 && m.winnerId) thirdPlaceId = m.winnerId;
+      if (m.placementOnLoss === 4 && m.loserId) fourthPlaceId = m.loserId;
+    }
+  }
+
+  for (const r of [...winnersRounds, ...losersRounds, ...finalsRounds]) {
+    r.processed = r.matches.every((m) => m.status === 'finished');
+  }
+
+  const allDone = allMatches.every((m) => m.status === 'finished');
+
+  return {
+    ...tournament,
+    status: allDone ? 'finished' : tournament.status,
+    finishedAt: allDone ? (tournament.finishedAt ?? Date.now()) : tournament.finishedAt,
+    championId,
+    runnerUpId,
+    thirdPlaceId,
+    fourthPlaceId,
+    bracket: {
+      ...bracket,
+      winnersRounds,
+      losersRounds,
+      finalsRounds,
+      eliminated,
+    },
+  };
+}
+
+// --- Fallback Dynamic Bracket for 2 teams or >16 teams ---
+
 function pickByeTeamIndex(teamIds: string[], byeHistoryTeamIds: string[]): number {
   for (let i = teamIds.length - 1; i >= 0; i -= 1) {
     if (!byeHistoryTeamIds.includes(teamIds[i])) {
@@ -99,18 +1204,7 @@ function pickByeTeamIndex(teamIds: string[], byeHistoryTeamIds: string[]): numbe
   return teamIds.length - 1;
 }
 
-function getWinnersRoundName(roundIndex: number, teamCount: number): string {
-  if (teamCount === 2) return 'Final dos Vencedores';
-  if (teamCount <= 4) return 'Semifinal (Vencedores)';
-  return `Rodada ${roundIndex + 1} (Vencedores)`;
-}
-
-function getLosersRoundName(roundIndex: number, teamCount: number, isWinnersDone: boolean): string {
-  if (isWinnersDone && teamCount === 2) return 'Final da Repescagem';
-  return `Repescagem ${roundIndex + 1}`;
-}
-
-function buildBracketRound(params: {
+function buildDynamicBracketRound(params: {
   teamIds: string[];
   side: 'winners' | 'losers';
   roundIndex: number;
@@ -165,12 +1259,12 @@ function buildBracketRound(params: {
 
   const name =
     params.side === 'winners'
-      ? getWinnersRoundName(params.roundIndex, params.teamIds.length)
-      : getLosersRoundName(
-          params.roundIndex,
-          params.teamIds.length,
-          Boolean(params.isWinnersDone),
-        );
+      ? params.teamIds.length === 2
+        ? 'Final'
+        : `Rodada ${params.roundIndex + 1} (Vencedores)`
+      : params.isWinnersDone && params.teamIds.length === 2
+        ? 'Final da Repescagem'
+        : `Repescagem ${params.roundIndex + 1}`;
 
   return {
     round: {
@@ -230,12 +1324,40 @@ export function startTournament(
       finishedAt: undefined,
       championId: undefined,
       runnerUpId: undefined,
+      thirdPlaceId: undefined,
+      fourthPlaceId: undefined,
       bracket: undefined,
       kingOfCourt,
     };
   }
 
-  const { round, byeHistoryTeamIds, nextMatchNumber } = buildBracketRound({
+  // Hybrid Fixed Graph for 3..16 teams (4, 8, or 16-team official 30-match structure)
+  if (teamIds.length >= 3 && teamIds.length <= 16) {
+    const bracket =
+      teamIds.length <= 4
+        ? buildHybridBracketState(teamIds, 4, HYBRID_4_SPECS, tournament.sport)
+        : teamIds.length <= 8
+          ? buildHybridBracketState(teamIds, 8, HYBRID_8_SPECS, tournament.sport)
+          : buildHybridBracketState(teamIds, 16, HYBRID_16_SPECS, tournament.sport);
+
+    const initialized: Tournament = {
+      ...tournament,
+      teams: orderedTeams,
+      status: 'in_progress',
+      updatedAt: now,
+      finishedAt: undefined,
+      championId: undefined,
+      runnerUpId: undefined,
+      thirdPlaceId: undefined,
+      fourthPlaceId: undefined,
+      bracket,
+      kingOfCourt: undefined,
+    };
+    return propagateHybridBracket(initialized);
+  }
+
+  // 2 teams or >16 teams fallback
+  const { round, byeHistoryTeamIds, nextMatchNumber } = buildDynamicBracketRound({
     teamIds,
     side: 'winners',
     roundIndex: 0,
@@ -245,8 +1367,10 @@ export function startTournament(
   });
 
   const bracket: BracketState = {
+    isHybridGraph: false,
     winnersRounds: [round],
     losersRounds: [],
+    finalsRounds: [],
     losersAdvancingPool: [],
     losersStagingPool: [],
     byeHistoryTeamIds,
@@ -262,6 +1386,8 @@ export function startTournament(
     finishedAt: undefined,
     championId: undefined,
     runnerUpId: undefined,
+    thirdPlaceId: undefined,
+    fourthPlaceId: undefined,
     bracket,
     kingOfCourt: undefined,
   };
@@ -273,7 +1399,8 @@ export function getAllMatches(tournament: Tournament): Match[] {
   }
   const winners = tournament.bracket?.winnersRounds.flatMap((r) => r.matches) ?? [];
   const losers = tournament.bracket?.losersRounds.flatMap((r) => r.matches) ?? [];
-  return [...winners, ...losers];
+  const finals = tournament.bracket?.finalsRounds?.flatMap((r) => r.matches) ?? [];
+  return [...winners, ...losers, ...finals].sort((a, b) => a.matchNumber - b.matchNumber);
 }
 
 export function findMatch(tournament: Tournament, matchId: string): Match | undefined {
@@ -313,6 +1440,10 @@ function mapMatchInTournament(
           ...round,
           matches: round.matches.map((m) => (m.id === matchId ? updater(m) : m)),
         })),
+        finalsRounds: (tournament.bracket.finalsRounds ?? []).map((round) => ({
+          ...round,
+          matches: round.matches.map((m) => (m.id === matchId ? updater(m) : m)),
+        })),
       },
     };
   }
@@ -340,7 +1471,7 @@ export interface FinishMatchPayload {
   events?: MatchStatEvent[];
 }
 
-function advanceBracket(tournament: Tournament): Tournament {
+function advanceDynamicBracket(tournament: Tournament): Tournament {
   const bracket = tournament.bracket;
   if (!bracket) return tournament;
 
@@ -354,7 +1485,6 @@ function advanceBracket(tournament: Tournament): Tournament {
   let losersChampionId = bracket.losersChampionId;
   let nextMatchNumber = bracket.nextMatchNumber;
 
-  // 1. Process any newly completed Winners round
   for (let i = 0; i < winnersRounds.length; i += 1) {
     const round = winnersRounds[i];
     if (round.processed) continue;
@@ -375,7 +1505,7 @@ function advanceBracket(tournament: Tournament): Tournament {
     if (roundWinners.length === 1) {
       winnersChampionId = roundWinners[0];
     } else if (roundWinners.length >= 2) {
-      const built = buildBracketRound({
+      const built = buildDynamicBracketRound({
         teamIds: roundWinners,
         side: 'winners',
         roundIndex: round.roundIndex + 1,
@@ -389,7 +1519,6 @@ function advanceBracket(tournament: Tournament): Tournament {
     }
   }
 
-  // 2. Process any newly completed Losers round
   for (let i = 0; i < losersRounds.length; i += 1) {
     const round = losersRounds[i];
     if (round.processed) continue;
@@ -412,7 +1541,6 @@ function advanceBracket(tournament: Tournament): Tournament {
     losersAdvancingPool.push(...lWinners);
   }
 
-  // 3. Spawn next Losers round if ready and not blocked waiting for Winners drops
   const hasActiveLosersRound = losersRounds.some((r) => !r.processed);
   if (!hasActiveLosersRound && !losersChampionId) {
     const unfinishedWinnersIdx = winnersRounds.findIndex((r) => !r.processed);
@@ -422,7 +1550,7 @@ function advanceBracket(tournament: Tournament): Tournament {
     if (!waitingForWinners) {
       const pool = [...losersAdvancingPool, ...losersStagingPool];
       if (pool.length >= 2) {
-        const built = buildBracketRound({
+        const built = buildDynamicBracketRound({
           teamIds: pool,
           side: 'losers',
           roundIndex: losersRounds.length,
@@ -453,6 +1581,7 @@ function advanceBracket(tournament: Tournament): Tournament {
     championId: winnersChampionId ?? tournament.championId,
     runnerUpId: isFullyFinished ? losersChampionId : tournament.runnerUpId,
     bracket: {
+      ...bracket,
       winnersRounds,
       losersRounds,
       losersAdvancingPool,
@@ -485,7 +1614,6 @@ function advanceKingOfCourt(
     [winnerId]: Math.max(prevBest, nextStreak),
   };
 
-  // Winner stays on court, loser goes to end of queue, next challenger enters
   const updatedQueue = [...koc.queue, loserId];
   const nextChallenger = updatedQueue.shift() ?? loserId;
 
@@ -548,27 +1676,26 @@ export function finishMatch(
     return advanceKingOfCourt(updated, finishedMatch);
   }
 
-  return advanceBracket(updated);
+  if (updated.bracket?.isHybridGraph) {
+    return propagateHybridBracket(updated);
+  }
+
+  return advanceDynamicBracket(updated);
 }
 
 export function finishTournamentManually(tournament: Tournament): Tournament {
   const standings = computeStandings(tournament);
-  let championId = tournament.championId;
-  let runnerUpId = tournament.runnerUpId;
-
-  if (tournament.format === 'bracket' && tournament.bracket?.winnersChampionId) {
-    championId = tournament.bracket.winnersChampionId;
-    const withoutChamp = standings.filter((s) => s.team.id !== championId);
-    runnerUpId = tournament.bracket.losersChampionId ?? withoutChamp[0]?.team.id;
-  } else {
-    championId = standings[0]?.team.id;
-    runnerUpId = standings[1]?.team.id;
-  }
+  const championId =
+    tournament.championId ?? tournament.bracket?.winnersChampionId ?? standings[0]?.team.id;
+  const withoutChamp = standings.filter((s) => s.team.id !== championId);
+  const runnerUpId =
+    tournament.runnerUpId ??
+    tournament.bracket?.losersChampionId ??
+    withoutChamp[0]?.team.id;
 
   const now = Date.now();
   let kingOfCourt = tournament.kingOfCourt;
   if (kingOfCourt) {
-    // Drop the unplayed pending match on manual finish so history stays clean
     const playedMatches = kingOfCourt.matches.filter(
       (m) => m.status === 'finished' || m.scoreA > 0 || m.scoreB > 0,
     );
@@ -604,6 +1731,8 @@ export function resetTournament(
       finishedAt: undefined,
       championId: undefined,
       runnerUpId: undefined,
+      thirdPlaceId: undefined,
+      fourthPlaceId: undefined,
       bracket: undefined,
       kingOfCourt: undefined,
     };
@@ -617,6 +1746,8 @@ export function resetTournament(
         finishedAt: undefined,
         championId: undefined,
         runnerUpId: undefined,
+        thirdPlaceId: undefined,
+        fourthPlaceId: undefined,
       },
       { shuffle: false },
     );
@@ -629,6 +1760,8 @@ export function resetTournament(
     finishedAt: undefined,
     championId: undefined,
     runnerUpId: undefined,
+    thirdPlaceId: undefined,
+    fourthPlaceId: undefined,
     bracket: undefined,
     kingOfCourt: undefined,
   };
@@ -711,17 +1844,23 @@ export function computeStandings(tournament: Tournament): TeamStanding[] {
     }
   }
 
+  const champId = tournament.championId ?? tournament.bracket?.winnersChampionId;
+  const runnerId = tournament.runnerUpId ?? tournament.bracket?.losersChampionId;
+  const thirdId = tournament.thirdPlaceId;
+  const fourthId = tournament.fourthPlaceId;
+
   const standings: TeamStanding[] = tournament.teams.map((team) => {
     const s = statsMap.get(team.id)!;
     const bestStreak = tournament.kingOfCourt?.bestStreakByTeam[team.id];
     let statusLabel = 'Em disputa';
-    if (tournament.championId === team.id || tournament.bracket?.winnersChampionId === team.id) {
-      statusLabel = 'Campeão';
-    } else if (
-      tournament.runnerUpId === team.id ||
-      tournament.bracket?.losersChampionId === team.id
-    ) {
-      statusLabel = 'Vice / Repescagem';
+    if (champId === team.id) {
+      statusLabel = 'Campeão (1º)';
+    } else if (runnerId === team.id) {
+      statusLabel = 'Vice-campeão (2º)';
+    } else if (thirdId === team.id) {
+      statusLabel = '3º Lugar';
+    } else if (fourthId === team.id) {
+      statusLabel = '4º Lugar';
     } else if (elimOrder.has(team.id)) {
       statusLabel = 'Eliminado';
     } else if (tournament.status === 'finished') {
@@ -744,13 +1883,18 @@ export function computeStandings(tournament: Tournament): TeamStanding[] {
     };
   });
 
+  const fixedRank = (id: string): number => {
+    if (id === champId) return 1;
+    if (id === runnerId) return 2;
+    if (id === thirdId) return 3;
+    if (id === fourthId) return 4;
+    return 999;
+  };
+
   standings.sort((a, b) => {
-    const champId = tournament.championId ?? tournament.bracket?.winnersChampionId;
-    const runnerId = tournament.runnerUpId ?? tournament.bracket?.losersChampionId;
-    if (a.team.id === champId) return -1;
-    if (b.team.id === champId) return 1;
-    if (a.team.id === runnerId) return -1;
-    if (b.team.id === runnerId) return 1;
+    const rA = fixedRank(a.team.id);
+    const rB = fixedRank(b.team.id);
+    if (rA !== rB) return rA - rB;
 
     if (tournament.format === 'bracket') {
       const aElim = elimOrder.get(a.team.id) ?? Number.MAX_SAFE_INTEGER;
