@@ -1,6 +1,12 @@
-import { Check, Crown, GitFork, Minus, Plus } from 'lucide-react';
+import { Check, Crown, Eye, EyeOff, GitFork, KeyRound, Lock, Minus, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { SPORT_PRESETS } from '../engine/sports';
+import {
+  isValidNumericPin,
+  MAX_PIN_LENGTH,
+  MIN_PIN_LENGTH,
+  sanitizeNumericPin,
+} from '../services/pinAuth';
 import type {
   ScoringMode,
   SportConfig,
@@ -13,6 +19,7 @@ export interface SetupResult {
   sport: SportConfig;
   format: TournamentFormat;
   targetTeamsCount: number;
+  pin: string;
 }
 
 interface SetupScreenProps {
@@ -31,6 +38,11 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
   const [format, setFormat] = useState<TournamentFormat>('bracket');
   const [targetTeamsCount, setTargetTeamsCount] = useState(16);
 
+  const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [showPinModal, setShowPinModal] = useState(false);
+
   const handleSelectSport = (id: SportId) => {
     setSportId(id);
     const preset = SPORT_PRESETS.find((s) => s.id === id);
@@ -43,8 +55,15 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePinChange = (raw: string) => {
+    const cleaned = sanitizeNumericPin(raw);
+    setPin(cleaned);
+    if (pinError && isValidNumericPin(cleaned)) {
+      setPinError(null);
+    }
+  };
+
+  const finalizeCreate = (validPin: string) => {
     const preset = SPORT_PRESETS.find((s) => s.id === sportId) ?? SPORT_PRESETS[0];
     const sport: SportConfig = {
       ...preset.defaultConfig,
@@ -61,7 +80,30 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
       sport,
       format,
       targetTeamsCount,
+      pin: validPin,
     });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = sanitizeNumericPin(pin);
+    if (!isValidNumericPin(cleaned)) {
+      setPinError(`A senha deve conter apenas números (mínimo de ${MIN_PIN_LENGTH} dígitos).`);
+      setShowPinModal(true);
+      return;
+    }
+    finalizeCreate(cleaned);
+  };
+
+  const handleConfirmPinModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = sanitizeNumericPin(pin);
+    if (!isValidNumericPin(cleaned)) {
+      setPinError(`Digite pelo menos ${MIN_PIN_LENGTH} números (0 a 9).`);
+      return;
+    }
+    setShowPinModal(false);
+    finalizeCreate(cleaned);
   };
 
   return (
@@ -331,13 +373,148 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
           </div>
         </section>
 
+        {/* Mandatory Numeric Password Section */}
+        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-emerald-500/40 dark:border-emerald-500/30 p-5 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <label
+              htmlFor="tournament-pin"
+              className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400"
+            >
+              <Lock className="w-4 h-4" />
+              Senha Numérica do Torneio (Obrigatória)
+            </label>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+              {pin.length}/{MIN_PIN_LENGTH}+ dígitos
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            Defina uma senha apenas com números (mínimo de {MIN_PIN_LENGTH} dígitos) para proteger a edição e o gerenciamento deste campeonato.
+          </p>
+
+          <div className="relative">
+            <input
+              id="tournament-pin"
+              type={showPin ? 'text' : 'password'}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
+              maxLength={MAX_PIN_LENGTH}
+              value={pin}
+              onChange={(e) => handlePinChange(e.target.value)}
+              placeholder="Ex: 1234 (somente números)"
+              className={`w-full h-14 pl-4 pr-12 rounded-2xl bg-amber-50/60 dark:bg-slate-800 border-2 outline-none text-lg font-extrabold tracking-widest text-slate-900 dark:text-white ${
+                pinError
+                  ? 'border-rose-500 focus:border-rose-500'
+                  : isValidNumericPin(pin)
+                    ? 'border-emerald-500 focus:border-emerald-500'
+                    : 'border-amber-200 dark:border-slate-700 focus:border-emerald-500'
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPin((v) => !v)}
+              aria-label={showPin ? 'Ocultar senha' : 'Mostrar senha'}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center justify-center"
+            >
+              {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+
+          {pinError && (
+            <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
+              {pinError}
+            </p>
+          )}
+        </section>
+
         <button
           type="submit"
           className="w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-base shadow-xl shadow-emerald-600/25 active:scale-[0.99] transition"
         >
-          Avançar para Cadastro de Times
+          Salvar Torneio e Cadastrar Times
         </button>
       </form>
+
+      {/* Mandatory PIN Modal if user submits without filling valid PIN */}
+      {showPinModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border-2 border-emerald-500/60 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <KeyRound className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">
+                  Defina a Senha do Torneio
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Obrigatório para proteger a edição deste campeonato
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmPinModal} className="space-y-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor="modal-setup-pin"
+                  className="block text-xs font-bold text-slate-700 dark:text-slate-300"
+                >
+                  Senha numérica (mínimo {MIN_PIN_LENGTH} dígitos, apenas 0-9)
+                </label>
+                <div className="relative">
+                  <input
+                    id="modal-setup-pin"
+                    type={showPin ? 'text' : 'password'}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoFocus
+                    autoComplete="off"
+                    maxLength={MAX_PIN_LENGTH}
+                    value={pin}
+                    onChange={(e) => handlePinChange(e.target.value)}
+                    placeholder="••••"
+                    className="w-full h-14 pl-4 pr-12 rounded-2xl bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 focus:border-emerald-500 outline-none text-center text-2xl font-extrabold tracking-[0.35em] text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin((v) => !v)}
+                    aria-label={showPin ? 'Ocultar senha' : 'Mostrar senha'}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center justify-center"
+                  >
+                    {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                {pinError && (
+                  <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                    {pinError}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowPinModal(false)}
+                  className="h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-sm"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="submit"
+                  className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-600/20"
+                >
+                  Salvar e Entrar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

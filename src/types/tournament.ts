@@ -144,6 +144,7 @@ export interface Tournament {
   id: string;
   publicToken?: string;
   publicStatus?: PublicLinkStatus;
+  pinHash?: string;
   name: string;
   sport: SportConfig;
   format: TournamentFormat;

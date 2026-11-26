@@ -1,3 +1,9 @@
+import {
+  hashPin,
+  isValidNumericPin,
+  sanitizeNumericPin,
+  saveTournamentPinHash,
+} from '../services/pinAuth';
 import type {
   BracketRound,
   BracketState,
@@ -27,14 +33,27 @@ export interface CreateTournamentInput {
   format: TournamentFormat;
   targetTeamsCount: number;
   teams?: Team[];
+  pin?: string;
+  pinHash?: string;
 }
 
 export function createTournament(input: CreateTournamentInput): Tournament {
   const now = Date.now();
+  const id = createId('trn');
+  const cleanPin = input.pin ? sanitizeNumericPin(input.pin) : '';
+  const computedPinHash =
+    input.pinHash ||
+    (isValidNumericPin(cleanPin) ? hashPin(cleanPin, id) : undefined);
+
+  if (computedPinHash) {
+    saveTournamentPinHash(id, computedPinHash);
+  }
+
   return {
-    id: createId('trn'),
+    id,
     publicToken: createId('pub'),
     publicStatus: 'ativo',
+    pinHash: computedPinHash,
     name: input.name.trim() || 'Torneio sem nome',
     sport: { ...input.sport },
     format: input.format,

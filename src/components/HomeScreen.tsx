@@ -1,6 +1,7 @@
 import {
   ChevronRight,
   History,
+  Lock,
   Plus,
   Smartphone,
   Trophy,
@@ -117,6 +118,9 @@ export function HomeScreen({
                         </span>
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
                           {t.status === 'setup' ? 'Cadastro' : 'Em jogo'}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                          <Lock className="w-2.5 h-2.5" /> Senha
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">

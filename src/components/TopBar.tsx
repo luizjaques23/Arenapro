@@ -1,10 +1,11 @@
-import { ArrowLeft, Download, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Download, Lock, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
 import { FutevoleiBall } from './FutevoleiBall';
 
 interface TopBarProps {
   title: string;
   subtitle?: string;
   onBack?: () => void;
+  onLockTournament?: () => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   muted: boolean;
@@ -17,6 +18,7 @@ export function TopBar({
   title,
   subtitle,
   onBack,
+  onLockTournament,
   theme,
   onToggleTheme,
   muted,
@@ -55,6 +57,18 @@ export function TopBar({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {onLockTournament && (
+            <button
+              type="button"
+              onClick={onLockTournament}
+              title="Sair / Bloquear torneio"
+              aria-label="Sair / Bloquear torneio"
+              className="h-10 px-2.5 sm:px-3 rounded-xl bg-amber-100/90 dark:bg-amber-950/70 hover:bg-amber-200 dark:hover:bg-amber-900/70 text-amber-900 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800/60 text-xs font-extrabold flex items-center gap-1.5 active:scale-95 transition"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sair / Bloquear</span>
+            </button>
+          )}
           {canInstall && onInstallClick && (
             <button
               type="button"

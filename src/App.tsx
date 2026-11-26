@@ -4,6 +4,7 @@ import { CourtGridBackground } from './components/CourtGridBackground';
 import { HistoryScreen } from './components/HistoryScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { LiveMatchScreen } from './components/LiveMatchScreen';
+import { PinUnlockModal } from './components/PinUnlockModal';
 import { PublicWatchScreen } from './components/PublicWatchScreen';
 import { ResetModal } from './components/ResetModal';
 import { ResultsScreen } from './components/ResultsScreen';
@@ -26,6 +27,12 @@ import {
   publishTournamentLive,
   type PublicRouteParams,
 } from './services/liveSync';
+import {
+  isTournamentUnlockedInSession,
+  lockTournamentSession,
+  removeTournamentPinData,
+  unlockTournamentSession,
+} from './services/pinAuth';
 import { soundEngine } from './services/sound';
 import {
   exportTournamentJson,
@@ -63,6 +70,11 @@ export function App() {
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  const [pendingPinRequest, setPendingPinRequest] = useState<{
+    tournamentId: string;
+    action: 'open' | 'delete';
+  } | null>(null);
 
   const [settings, setSettings] = useState(() => loadSettings());
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -109,13 +121,39 @@ export function App() {
   }, []);
 
   const activeTournament = tournaments.find((t) => t.id === activeTournamentId) ?? null;
+  const isActiveUnlocked = isTournamentUnlockedInSession(activeTournament);
+
   const activeMatch =
-    activeTournament && activeMatchId
+    activeTournament && activeMatchId && isActiveUnlocked
       ? findMatch(activeTournament, activeMatchId) ?? null
       : null;
 
+  const pendingUnlockTournament = pendingPinRequest
+    ? tournaments.find((t) => t.id === pendingPinRequest.tournamentId) ?? null
+    : null;
+
+  const enterTournamentDirect = (target: Tournament) => {
+    setActiveTournamentId(target.id);
+    if (target.status === 'setup') setScreen('teams');
+    else if (target.status === 'finished') setScreen('results');
+    else setScreen('bracket');
+  };
+
+  const handleLockActiveTournament = useCallback(() => {
+    lockTournamentSession();
+    setActiveTournamentId(null);
+    setActiveMatchId(null);
+    setShowResetModal(false);
+    setScreen('home');
+    showToastMessage('Torneio bloqueado com segurança.');
+  }, [showToastMessage]);
+
   const updateActiveTournament = (updater: (t: Tournament) => Tournament) => {
-    if (!activeTournamentId) return;
+    if (!activeTournamentId || !activeTournament) return;
+    if (!isTournamentUnlockedInSession(activeTournament)) {
+      setPendingPinRequest({ tournamentId: activeTournament.id, action: 'open' });
+      return;
+    }
     setTournaments((prev) =>
       prev.map((t) => (t.id === activeTournamentId ? updater(t) : t)),
     );
@@ -123,6 +161,8 @@ export function App() {
 
   const handleCreateTournament = (setup: SetupResult) => {
     const created = createTournament(setup);
+    // Automatically authorize the newly created tournament in the current sessionStorage
+    unlockTournamentSession(created.id);
     setTournaments((prev) => [created, ...prev]);
     setActiveTournamentId(created.id);
     setScreen('teams');
@@ -131,21 +171,70 @@ export function App() {
   const handleOpenTournament = (id: string) => {
     const target = tournaments.find((t) => t.id === id);
     if (!target) return;
-    setActiveTournamentId(id);
-    if (target.status === 'setup') setScreen('teams');
-    else if (target.status === 'finished') setScreen('results');
-    else setScreen('bracket');
+
+    // Ongoing tournaments always require password authentication before viewing/managing
+    // Switching between tournaments also isolates session unlock per tournament
+    if (target.status !== 'finished') {
+      lockTournamentSession();
+      setPendingPinRequest({ tournamentId: target.id, action: 'open' });
+      return;
+    }
+
+    enterTournamentDirect(target);
+  };
+
+  const handleDeleteTournament = (id: string) => {
+    const target = tournaments.find((t) => t.id === id);
+    if (!target) return;
+
+    if (target.status !== 'finished' && !isTournamentUnlockedInSession(target)) {
+      setPendingPinRequest({ tournamentId: target.id, action: 'delete' });
+      return;
+    }
+
+    removeTournamentPinData(id);
+    setTournaments((prev) => prev.filter((t) => t.id !== id));
+    if (activeTournamentId === id) setActiveTournamentId(null);
+    showToastMessage('Torneio excluído.');
+  };
+
+  const handlePinUnlocked = (tournamentId: string, newPinHash?: string) => {
+    const req = pendingPinRequest;
+    setPendingPinRequest(null);
+
+    if (newPinHash) {
+      setTournaments((prev) =>
+        prev.map((t) => (t.id === tournamentId ? { ...t, pinHash: newPinHash } : t)),
+      );
+    }
+
+    const target = tournaments.find((t) => t.id === tournamentId);
+    if (!target) return;
+
+    if (req?.action === 'delete') {
+      removeTournamentPinData(tournamentId);
+      setTournaments((prev) => prev.filter((t) => t.id !== tournamentId));
+      if (activeTournamentId === tournamentId) setActiveTournamentId(null);
+      showToastMessage('Torneio excluído.');
+      return;
+    }
+
+    enterTournamentDirect(
+      newPinHash ? { ...target, pinHash: newPinHash } : target,
+    );
   };
 
   const handleImportJson = (rawText: string) => {
     try {
       const imported = parseImportedTournament(rawText);
       setTournaments((prev) => [imported, ...prev]);
-      setActiveTournamentId(imported.id);
       showToastMessage(`Torneio "${imported.name}" importado!`);
-      if (imported.status === 'setup') setScreen('teams');
-      else if (imported.status === 'finished') setScreen('results');
-      else setScreen('bracket');
+      if (imported.status !== 'finished') {
+        lockTournamentSession();
+        setPendingPinRequest({ tournamentId: imported.id, action: 'open' });
+      } else {
+        enterTournamentDirect(imported);
+      }
     } catch (err) {
       showToastMessage(
         err instanceof Error ? err.message : 'Falha ao importar JSON.',
@@ -160,15 +249,30 @@ export function App() {
     if (res.outcome === 'accepted') setInstallPrompt(null);
   };
 
+  const leaveToHome = () => {
+    lockTournamentSession();
+    setActiveTournamentId(null);
+    setActiveMatchId(null);
+    setScreen('home');
+  };
+
   const handleBack = (): (() => void) | undefined => {
     if (screen === 'home') return undefined;
-    if (screen === 'setup' || screen === 'history') return () => setScreen('home');
-    if (screen === 'teams') return () => setScreen('home');
-    if (screen === 'bracket') return () => setScreen('home');
+    if (screen === 'setup' || screen === 'history') return leaveToHome;
+    if (screen === 'teams') return leaveToHome;
+    if (screen === 'bracket') return leaveToHome;
     if (screen === 'live_match') return () => setScreen('bracket');
     if (screen === 'results') return () => setScreen('bracket');
     return undefined;
   };
+
+  const isInsideProtectedTournament =
+    !publicParams &&
+    Boolean(activeTournament) &&
+    (screen === 'teams' ||
+      screen === 'bracket' ||
+      screen === 'live_match' ||
+      screen === 'results');
 
   const getHeaderMeta = () => {
     switch (screen) {
@@ -213,158 +317,196 @@ export function App() {
       {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
 
       <div className="relative z-10">
-      <TopBar
-        title={headerMeta.title}
-        subtitle={headerMeta.subtitle}
-        onBack={publicParams ? undefined : handleBack()}
-        theme={settings.theme}
-        onToggleTheme={() =>
-          setSettings((s) => ({ ...s, theme: s.theme === 'dark' ? 'light' : 'dark' }))
-        }
-        muted={settings.muted}
-        onToggleMute={() => setSettings((s) => ({ ...s, muted: !s.muted }))}
-        canInstall={Boolean(installPrompt) && !isStandalone}
-        onInstallClick={handleInstallClick}
-      />
-
-      {publicParams ? (
-        <PublicWatchScreen
-          tournamentId={publicParams.tournamentId}
-          token={publicParams.token}
-        />
-      ) : (
-        <>
-
-      {toast && (
-        <div className="fixed bottom-24 inset-x-4 max-w-sm mx-auto z-50 rounded-2xl bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 px-4 py-3 text-center text-xs font-extrabold shadow-2xl">
-          {toast}
-        </div>
-      )}
-
-      {screen === 'home' && (
-        <HomeScreen
-          tournaments={tournaments}
-          onNewTournament={() => setScreen('setup')}
-          onOpenTournament={handleOpenTournament}
-          onOpenHistory={() => setScreen('history')}
-          showIosInstallHint={isIos && !isStandalone}
-        />
-      )}
-
-      {screen === 'setup' && <SetupScreen onCreate={handleCreateTournament} />}
-
-      {screen === 'teams' && activeTournament && (
-        <TeamsScreen
-          tournament={activeTournament}
-          onUpdateTeams={(teams: Team[]) =>
-            updateActiveTournament((t) => ({ ...t, teams, updatedAt: Date.now() }))
+        <TopBar
+          title={headerMeta.title}
+          subtitle={headerMeta.subtitle}
+          onBack={publicParams ? undefined : handleBack()}
+          onLockTournament={
+            isInsideProtectedTournament ? handleLockActiveTournament : undefined
           }
-          onStartTournament={(shuffle) => {
-            updateActiveTournament((t) => startTournament(t, { shuffle }));
-            soundEngine.playWhistle();
-            setScreen('bracket');
-          }}
-        />
-      )}
-
-      {screen === 'bracket' && activeTournament && (
-        <BracketDashboard
-          tournament={activeTournament}
-          onOpenMatch={(matchId) => {
-            setActiveMatchId(matchId);
-            setScreen('live_match');
-          }}
-          onSelectDirectWinner={(matchId, winnerId) => {
-            const nextState = finishMatch(activeTournament, matchId, {
-              winnerId,
-              scoreA: 0,
-              scoreB: 0,
-              sets: [],
-            });
-            soundEngine.playWhistle();
-            updateActiveTournament(() => nextState);
-            if (nextState.status === 'finished') {
-              setScreen('results');
-            }
-          }}
-          onFinishManually={() => {
-            updateActiveTournament((t) => finishTournamentManually(t));
-            setScreen('results');
-          }}
-          onOpenResults={() => setScreen('results')}
-          onExportJson={() => {
-            exportTournamentJson(activeTournament);
-            showToastMessage('Backup JSON exportado!');
-          }}
-          onOpenReset={() => setShowResetModal(true)}
-        />
-      )}
-
-      {screen === 'live_match' && activeTournament && activeMatch && (
-        <LiveMatchScreen
-          tournament={activeTournament}
-          match={activeMatch}
-          onUpdateLive={(updater) =>
-            updateActiveTournament((t) =>
-              updateLiveMatchState(t, activeMatch.id, updater),
-            )
+          theme={settings.theme}
+          onToggleTheme={() =>
+            setSettings((s) => ({ ...s, theme: s.theme === 'dark' ? 'light' : 'dark' }))
           }
-          onFinishMatch={(payload) => {
-            const nextState = finishMatch(activeTournament, activeMatch.id, payload);
-            updateActiveTournament(() => nextState);
-            setActiveMatchId(null);
-            if (nextState.status === 'finished') {
-              setScreen('results');
-            } else {
-              setScreen('bracket');
-            }
-          }}
+          muted={settings.muted}
+          onToggleMute={() => setSettings((s) => ({ ...s, muted: !s.muted }))}
+          canInstall={Boolean(installPrompt) && !isStandalone}
+          onInstallClick={handleInstallClick}
         />
-      )}
 
-      {screen === 'results' && activeTournament && (
-        <ResultsScreen
-          tournament={activeTournament}
-          onViewBracket={() => setScreen('bracket')}
-          onExportJson={() => {
-            exportTournamentJson(activeTournament);
-            showToastMessage('Backup JSON exportado!');
-          }}
-          onGoHome={() => setScreen('home')}
-        />
-      )}
+        {publicParams ? (
+          <PublicWatchScreen
+            tournamentId={publicParams.tournamentId}
+            token={publicParams.token}
+          />
+        ) : (
+          <>
+            {toast && (
+              <div className="fixed bottom-24 inset-x-4 max-w-sm mx-auto z-50 rounded-2xl bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 px-4 py-3 text-center text-xs font-extrabold shadow-2xl">
+                {toast}
+              </div>
+            )}
 
-      {screen === 'history' && (
-        <HistoryScreen
-          tournaments={tournaments}
-          onOpenTournament={handleOpenTournament}
-          onDeleteTournament={(id) => {
-            setTournaments((prev) => prev.filter((t) => t.id !== id));
-            if (activeTournamentId === id) setActiveTournamentId(null);
-          }}
-          onImportJson={handleImportJson}
-        />
-      )}
+            {screen === 'home' && (
+              <HomeScreen
+                tournaments={tournaments}
+                onNewTournament={() => setScreen('setup')}
+                onOpenTournament={handleOpenTournament}
+                onOpenHistory={() => setScreen('history')}
+                showIosInstallHint={isIos && !isStandalone}
+              />
+            )}
 
-      {showResetModal && activeTournament && (
-        <ResetModal
-          tournamentName={activeTournament.name}
-          onClose={() => setShowResetModal(false)}
-          onConfirmReset={(mode) => {
-            updateActiveTournament((t) => resetTournament(t, mode));
-            setShowResetModal(false);
-            if (mode === 'all') {
-              setScreen('teams');
-              showToastMessage('Times e histórico zerados.');
-            } else {
-              setScreen(activeTournament.teams.length >= 2 ? 'bracket' : 'teams');
-              showToastMessage('Placares e rodadas reiniciados.');
-            }
-          }}
-        />
-      )}
-        </>
-      )}
+            {screen === 'setup' && <SetupScreen onCreate={handleCreateTournament} />}
+
+            {screen === 'teams' && activeTournament && isActiveUnlocked && (
+              <TeamsScreen
+                tournament={activeTournament}
+                onUpdateTeams={(teams: Team[]) =>
+                  updateActiveTournament((t) => ({ ...t, teams, updatedAt: Date.now() }))
+                }
+                onStartTournament={(shuffle) => {
+                  updateActiveTournament((t) => startTournament(t, { shuffle }));
+                  soundEngine.playWhistle();
+                  setScreen('bracket');
+                }}
+                onLockTournament={handleLockActiveTournament}
+              />
+            )}
+
+            {screen === 'bracket' && activeTournament && isActiveUnlocked && (
+              <BracketDashboard
+                tournament={activeTournament}
+                onOpenMatch={(matchId) => {
+                  if (!isTournamentUnlockedInSession(activeTournament)) return;
+                  setActiveMatchId(matchId);
+                  setScreen('live_match');
+                }}
+                onSelectDirectWinner={(matchId, winnerId) => {
+                  if (!isTournamentUnlockedInSession(activeTournament)) return;
+                  const nextState = finishMatch(activeTournament, matchId, {
+                    winnerId,
+                    scoreA: 0,
+                    scoreB: 0,
+                    sets: [],
+                  });
+                  soundEngine.playWhistle();
+                  updateActiveTournament(() => nextState);
+                  if (nextState.status === 'finished') {
+                    setScreen('results');
+                  }
+                }}
+                onFinishManually={() => {
+                  if (!isTournamentUnlockedInSession(activeTournament)) return;
+                  updateActiveTournament((t) => finishTournamentManually(t));
+                  setScreen('results');
+                }}
+                onOpenResults={() => setScreen('results')}
+                onExportJson={() => {
+                  exportTournamentJson(activeTournament);
+                  showToastMessage('Backup JSON exportado!');
+                }}
+                onOpenReset={() => {
+                  if (!isTournamentUnlockedInSession(activeTournament)) return;
+                  setShowResetModal(true);
+                }}
+                onLockTournament={handleLockActiveTournament}
+              />
+            )}
+
+            {screen === 'live_match' &&
+              activeTournament &&
+              activeMatch &&
+              isActiveUnlocked && (
+                <LiveMatchScreen
+                  tournament={activeTournament}
+                  match={activeMatch}
+                  onUpdateLive={(updater) =>
+                    updateActiveTournament((t) =>
+                      updateLiveMatchState(t, activeMatch.id, updater),
+                    )
+                  }
+                  onFinishMatch={(payload) => {
+                    if (!isTournamentUnlockedInSession(activeTournament)) return;
+                    const nextState = finishMatch(
+                      activeTournament,
+                      activeMatch.id,
+                      payload,
+                    );
+                    updateActiveTournament(() => nextState);
+                    setActiveMatchId(null);
+                    if (nextState.status === 'finished') {
+                      setScreen('results');
+                    } else {
+                      setScreen('bracket');
+                    }
+                  }}
+                />
+              )}
+
+            {screen === 'results' &&
+              activeTournament &&
+              (activeTournament.status === 'finished' || isActiveUnlocked) && (
+                <ResultsScreen
+                  tournament={activeTournament}
+                  onViewBracket={() => {
+                    if (
+                      activeTournament.status !== 'finished' &&
+                      !isTournamentUnlockedInSession(activeTournament)
+                    ) {
+                      setPendingPinRequest({
+                        tournamentId: activeTournament.id,
+                        action: 'open',
+                      });
+                      return;
+                    }
+                    setScreen('bracket');
+                  }}
+                  onExportJson={() => {
+                    exportTournamentJson(activeTournament);
+                    showToastMessage('Backup JSON exportado!');
+                  }}
+                  onGoHome={leaveToHome}
+                />
+              )}
+
+            {screen === 'history' && (
+              <HistoryScreen
+                tournaments={tournaments}
+                onOpenTournament={handleOpenTournament}
+                onDeleteTournament={handleDeleteTournament}
+                onImportJson={handleImportJson}
+              />
+            )}
+
+            {showResetModal && activeTournament && isActiveUnlocked && (
+              <ResetModal
+                tournamentName={activeTournament.name}
+                onClose={() => setShowResetModal(false)}
+                onConfirmReset={(mode) => {
+                  if (!isTournamentUnlockedInSession(activeTournament)) return;
+                  updateActiveTournament((t) => resetTournament(t, mode));
+                  setShowResetModal(false);
+                  if (mode === 'all') {
+                    setScreen('teams');
+                    showToastMessage('Times e histórico zerados.');
+                  } else {
+                    setScreen(activeTournament.teams.length >= 2 ? 'bracket' : 'teams');
+                    showToastMessage('Placares e rodadas reiniciados.');
+                  }
+                }}
+              />
+            )}
+
+            {pendingUnlockTournament && (
+              <PinUnlockModal
+                tournament={pendingUnlockTournament}
+                onClose={() => setPendingPinRequest(null)}
+                onUnlocked={handlePinUnlocked}
+              />
+            )}
+          </>
+        )}
       </div>
     </div>
   );

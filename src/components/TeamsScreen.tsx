@@ -2,6 +2,7 @@ import {
   Check,
   Copy,
   Link2,
+  Lock,
   Pencil,
   Play,
   Plus,
@@ -21,12 +22,14 @@ interface TeamsScreenProps {
   tournament: Tournament;
   onUpdateTeams: (teams: Team[]) => void;
   onStartTournament: (shuffle: boolean) => void;
+  onLockTournament?: () => void;
 }
 
 export function TeamsScreen({
   tournament,
   onUpdateTeams,
   onStartTournament,
+  onLockTournament,
 }: TeamsScreenProps) {
   const isFutevolei = tournament.sport.id === 'futevolei';
   const defaultPlayerSlots = tournament.sport.id === 'futsal' ? 3 : 2;
@@ -171,6 +174,19 @@ export function TeamsScreen({
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 pb-28 space-y-6">
+      {onLockTournament && (
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={onLockTournament}
+            className="h-9 px-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-slate-700 text-xs font-extrabold text-amber-800 dark:text-amber-300 flex items-center gap-1.5 shadow-sm hover:bg-amber-50 dark:hover:bg-slate-800 transition"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            Sair / Bloquear torneio
+          </button>
+        </div>
+      )}
+
       {/* Public Tracking Link Banner */}
       {publicUrl && (
         <section className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 p-3.5 flex items-center justify-between gap-3">
@@ -308,9 +324,8 @@ export function TeamsScreen({
                     type="button"
                     onClick={() => setColor(c)}
                     aria-label={`Cor ${c}`}
-                    className={`w-8 h-8 rounded-full border-2 transition ${
-                      color === c ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
-                    }`}
+                    className={`w-8 h-8 rounded-full border-2 transition ${color === c ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
+                      }`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
@@ -327,11 +342,10 @@ export function TeamsScreen({
                     key={em}
                     type="button"
                     onClick={() => setEmblem(em)}
-                    className={`w-8 h-8 rounded-xl text-base flex items-center justify-center border ${
-                      emblem === em
-                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950'
-                        : 'border-slate-200 dark:border-slate-700'
-                    }`}
+                    className={`w-8 h-8 rounded-xl text-base flex items-center justify-center border ${emblem === em
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950'
+                      : 'border-slate-200 dark:border-slate-700'
+                      }`}
                   >
                     {em}
                   </button>
@@ -416,11 +430,10 @@ export function TeamsScreen({
           <button
             type="button"
             onClick={() => setShuffleOnStart((s) => !s)}
-            className={`h-14 px-4 rounded-2xl border-2 font-bold text-xs flex items-center gap-2 shrink-0 transition ${
-              shuffleOnStart
-                ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
-                : 'border-slate-200 dark:border-slate-700 text-slate-500'
-            }`}
+            className={`h-14 px-4 rounded-2xl border-2 font-bold text-xs flex items-center gap-2 shrink-0 transition ${shuffleOnStart
+              ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
+              : 'border-slate-200 dark:border-slate-700 text-slate-500'
+              }`}
           >
             <Shuffle className="w-4 h-4" />
             <span className="hidden sm:inline">Sortear:</span>

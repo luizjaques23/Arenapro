@@ -28,9 +28,15 @@ export function parsePublicRouteFromLocation(): PublicRouteParams | null {
   return null;
 }
 
+function stripSensitiveFields(tournament: Tournament): Tournament {
+  const sanitized = { ...tournament };
+  delete sanitized.pinHash;
+  return sanitized;
+}
+
 export function encodeSnapshot(tournament: Tournament): string {
   try {
-    const json = JSON.stringify(tournament);
+    const json = JSON.stringify(stripSensitiveFields(tournament));
     return LZString.compressToEncodedURIComponent(json);
   } catch {
     return '';
@@ -100,10 +106,10 @@ function getRelayTopic(tournamentId: string): string {
 export async function publishTournamentLive(tournament: Tournament): Promise<void> {
   const isFinished =
     tournament.status === 'finished' || tournament.publicStatus === 'encerrado';
-  const updatedTournament: Tournament = {
+  const updatedTournament: Tournament = stripSensitiveFields({
     ...tournament,
     publicStatus: isFinished ? 'encerrado' : 'ativo',
-  };
+  });
 
   // 1. Broadcast locally for instant multi-tab/same-device reflection
   if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {

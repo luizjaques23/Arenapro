@@ -8,6 +8,7 @@ import {
   Flag,
   Link2,
   ListOrdered,
+  Lock,
   Play,
   RotateCcw,
   Swords,
@@ -30,6 +31,7 @@ interface BracketDashboardProps {
   onOpenResults: () => void;
   onExportJson: () => void;
   onOpenReset: () => void;
+  onLockTournament?: () => void;
 }
 
 function getTeam(teams: Team[], id: string | null | undefined): Team | undefined {
@@ -342,6 +344,7 @@ export function BracketDashboard({
   onOpenResults,
   onExportJson,
   onOpenReset,
+  onLockTournament,
 }: BracketDashboardProps) {
   const [filter, setFilter] = useState<
     'all' | 'blocks' | 'winners' | 'losers' | 'finals'
@@ -432,7 +435,17 @@ export function BracketDashboard({
             : `${finishedMatchesCount}/${allMatches.length} jogos concluídos`}
         </div>
         {!readOnly && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {onLockTournament && (
+              <button
+                type="button"
+                onClick={onLockTournament}
+                className="h-9 px-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-slate-700 text-xs font-extrabold flex items-center gap-1.5 text-amber-800 dark:text-amber-300"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Sair / Bloquear torneio
+              </button>
+            )}
             <button
               type="button"
               onClick={onExportJson}
