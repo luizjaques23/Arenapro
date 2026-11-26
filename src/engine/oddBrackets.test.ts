@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { SPORT_PRESETS } from './sports';
 import {
+  computeStandings,
   createTournament,
   finishMatch,
   getAllMatches,
   startTournament,
+  updateTournamentTeamsInPlace,
 } from './tournamentEngine';
 import type { Match, Team, Tournament } from '../types/tournament';
 
@@ -138,4 +140,135 @@ describe('Futevôlei odd formats (7, 9, 11, 13 duplas) — hybrid double elimina
       }
     });
   }
+
+  it('permite editar duplas, substituir jogadores e ajustar composição durante o torneio preservando resultados e chaveamento', () => {
+    const sport = SPORT_PRESETS[0].defaultConfig;
+    const initialTeams: Team[] = [
+      {
+        id: 't1',
+        name: 'Lucas / Matheus',
+        color: '#10b981',
+        emblem: '',
+        players: [
+          { id: 'p1', name: 'Lucas' },
+          { id: 'p2', name: 'Matheus' },
+        ],
+      },
+      {
+        id: 't2',
+        name: 'Gabriel / Rafael',
+        color: '#10b981',
+        emblem: '',
+        players: [
+          { id: 'p3', name: 'Gabriel' },
+          { id: 'p4', name: 'Rafael' },
+        ],
+      },
+      {
+        id: 't3',
+        name: 'Bruno / Thiago',
+        color: '#10b981',
+        emblem: '',
+        players: [
+          { id: 'p5', name: 'Bruno' },
+          { id: 'p6', name: 'Thiago' },
+        ],
+      },
+      {
+        id: 't4',
+        name: 'Pedro / Felipe',
+        color: '#10b981',
+        emblem: '',
+        players: [
+          { id: 'p7', name: 'Pedro' },
+          { id: 'p8', name: 'Felipe' },
+        ],
+      },
+    ];
+
+    const created = createTournament({
+      name: 'Torneio Edição',
+      sport,
+      format: 'bracket',
+      targetTeamsCount: 4,
+      teams: initialTeams,
+    });
+    let t = startTournament(created, { shuffle: false });
+
+    // Finish match 1 before editing teams
+    const firstMatch = getAllMatches(t)[0];
+    t = finishMatch(t, firstMatch.id, {
+      winnerId: 't1',
+      scoreA: 18,
+      scoreB: 15,
+      sets: [],
+    });
+
+    const matchesSnapshotBefore = getAllMatches(t).map((m) => ({
+      id: m.id,
+      status: m.status,
+      teamAId: m.teamAId,
+      teamBId: m.teamBId,
+      winnerId: m.winnerId,
+      loserId: m.loserId,
+      scoreA: m.scoreA,
+      scoreB: m.scoreB,
+    }));
+
+    // Now edit t1 (replace Matheus with Carlos) and swap players between t2 and t3
+    const editedTeams: Team[] = [
+      {
+        ...t.teams[0],
+        name: 'Lucas / Matheus', // auto-name should update to 'Lucas / Carlos'
+        players: [
+          { id: 'p1', name: 'Lucas' },
+          { id: 'p2', name: 'Carlos' },
+        ],
+      },
+      {
+        ...t.teams[1],
+        name: 'Gabriel / Thiago',
+        players: [
+          { id: 'p3', name: 'Gabriel' },
+          { id: 'p6', name: 'Thiago' },
+        ],
+      },
+      {
+        ...t.teams[2],
+        name: 'Bruno / Rafael',
+        players: [
+          { id: 'p5', name: 'Bruno' },
+          { id: 'p4', name: 'Rafael' },
+        ],
+      },
+      t.teams[3],
+    ];
+
+    const updated = updateTournamentTeamsInPlace(t, editedTeams);
+
+    // 1. Names & players updated across the system
+    expect(updated.teams[0].name).toBe('Lucas / Carlos');
+    expect(updated.teams[0].players.map((p) => p.name)).toEqual(['Lucas', 'Carlos']);
+    expect(updated.teams[1].name).toBe('Gabriel / Thiago');
+    expect(updated.teams[2].name).toBe('Bruno / Rafael');
+
+    // 2. All match results, IDs, scores and bracket structure 100% preserved
+    const matchesSnapshotAfter = getAllMatches(updated).map((m) => ({
+      id: m.id,
+      status: m.status,
+      teamAId: m.teamAId,
+      teamBId: m.teamBId,
+      winnerId: m.winnerId,
+      loserId: m.loserId,
+      scoreA: m.scoreA,
+      scoreB: m.scoreB,
+    }));
+    expect(matchesSnapshotAfter).toEqual(matchesSnapshotBefore);
+
+    // 3. Standings reflect the new dupla names and keep the win count
+    const standings = computeStandings(updated);
+    const t1Standing = standings.find((s) => s.team.id === 't1');
+    expect(t1Standing?.team.name).toBe('Lucas / Carlos');
+    expect(t1Standing?.wins).toBe(1);
+  });
 });

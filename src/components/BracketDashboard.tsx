@@ -9,6 +9,7 @@ import {
   Link2,
   ListOrdered,
   Lock,
+  Pencil,
   Play,
   RotateCcw,
   Swords,
@@ -31,6 +32,7 @@ interface BracketDashboardProps {
   onOpenResults: () => void;
   onExportJson: () => void;
   onOpenReset: () => void;
+  onEditTeams?: () => void;
   onLockTournament?: () => void;
 }
 
@@ -344,6 +346,7 @@ export function BracketDashboard({
   onOpenResults,
   onExportJson,
   onOpenReset,
+  onEditTeams,
   onLockTournament,
 }: BracketDashboardProps) {
   const [filter, setFilter] = useState<
@@ -436,6 +439,16 @@ export function BracketDashboard({
         </div>
         {!readOnly && (
           <div className="flex flex-wrap items-center gap-2">
+            {onEditTeams && (
+              <button
+                type="button"
+                onClick={onEditTeams}
+                className="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm active:scale-95 transition"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                EDITAR
+              </button>
+            )}
             {onLockTournament && (
               <button
                 type="button"

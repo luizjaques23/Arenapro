@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BracketDashboard } from './components/BracketDashboard';
 import { CourtGridBackground } from './components/CourtGridBackground';
+import { EditTeamsModal } from './components/EditTeamsModal';
 import { HistoryScreen } from './components/HistoryScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { LiveMatchScreen } from './components/LiveMatchScreen';
@@ -21,6 +22,7 @@ import {
   resetTournament,
   startTournament,
   updateLiveMatchState,
+  updateTournamentTeamsInPlace,
 } from './engine/tournamentEngine';
 import {
   parsePublicRouteFromLocation,
@@ -69,6 +71,7 @@ export function App() {
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showEditTeamsModal, setShowEditTeamsModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const [pendingPinRequest, setPendingPinRequest] = useState<{
@@ -144,6 +147,7 @@ export function App() {
     setActiveTournamentId(null);
     setActiveMatchId(null);
     setShowResetModal(false);
+    setShowEditTeamsModal(false);
     setScreen('home');
     showToastMessage('Torneio bloqueado com segurança.');
   }, [showToastMessage]);
@@ -351,7 +355,7 @@ export function App() {
               <TeamsScreen
                 tournament={activeTournament}
                 onUpdateTeams={(teams: Team[]) =>
-                  updateActiveTournament((t) => ({ ...t, teams, updatedAt: Date.now() }))
+                  updateActiveTournament((t) => updateTournamentTeamsInPlace(t, teams))
                 }
                 onStartTournament={(shuffle) => {
                   updateActiveTournament((t) => startTournament(t, { shuffle }));
@@ -397,6 +401,10 @@ export function App() {
                 onOpenReset={() => {
                   if (!isTournamentUnlockedInSession(activeTournament)) return;
                   setShowResetModal(true);
+                }}
+                onEditTeams={() => {
+                  if (!isTournamentUnlockedInSession(activeTournament)) return;
+                  setShowEditTeamsModal(true);
                 }}
                 onLockTournament={handleLockActiveTournament}
               />
@@ -450,6 +458,11 @@ export function App() {
                     }
                     setScreen('bracket');
                   }}
+                  onEditTeams={
+                    isActiveUnlocked
+                      ? () => setShowEditTeamsModal(true)
+                      : undefined
+                  }
                   onExportJson={() => {
                     exportTournamentJson(activeTournament);
                     showToastMessage('Backup JSON exportado!');
@@ -464,6 +477,21 @@ export function App() {
                 onOpenTournament={handleOpenTournament}
                 onDeleteTournament={handleDeleteTournament}
                 onImportJson={handleImportJson}
+              />
+            )}
+
+            {showEditTeamsModal && activeTournament && isActiveUnlocked && (
+              <EditTeamsModal
+                tournament={activeTournament}
+                onClose={() => setShowEditTeamsModal(false)}
+                onSaveTeams={(updatedTeams) => {
+                  if (!isTournamentUnlockedInSession(activeTournament)) return;
+                  updateActiveTournament((t) =>
+                    updateTournamentTeamsInPlace(t, updatedTeams),
+                  );
+                  setShowEditTeamsModal(false);
+                  showToastMessage('Duplas atualizadas com sucesso!');
+                }}
               />
             )}
 

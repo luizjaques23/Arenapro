@@ -5,6 +5,7 @@ import {
   FileText,
   GitFork,
   Home,
+  Pencil,
   Share2,
   Trophy,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import type { Tournament } from '../types/tournament';
 interface ResultsScreenProps {
   tournament: Tournament;
   onViewBracket: () => void;
+  onEditTeams?: () => void;
   onExportJson: () => void;
   onGoHome: () => void;
 }
@@ -26,6 +28,7 @@ interface ResultsScreenProps {
 export function ResultsScreen({
   tournament,
   onViewBracket,
+  onEditTeams,
   onExportJson,
   onGoHome,
 }: ResultsScreenProps) {
@@ -240,7 +243,17 @@ export function ResultsScreen({
       </section>
 
       {/* Secondary Actions */}
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className={`grid ${onEditTeams ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-2.5`}>
+        {onEditTeams && (
+          <button
+            type="button"
+            onClick={onEditTeams}
+            className="h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm"
+          >
+            <Pencil className="w-4 h-4" />
+            EDITAR
+          </button>
+        )}
         <button
           type="button"
           onClick={onViewBracket}
