@@ -79,7 +79,7 @@ export interface Match {
   nextLoserMatchNumber?: number;
   nextLoserSlot?: 'A' | 'B';
   placementOnWin?: 1 | 3;
-  placementOnLoss?: 2 | 4;
+  placementOnLoss?: 2 | 3 | 4;
   isBye: boolean;
   status: MatchStatus;
   scoreA: number;
@@ -138,9 +138,12 @@ export interface KingOfCourtState {
 
 export type TournamentStatus = 'setup' | 'in_progress' | 'finished';
 
+export type PublicLinkStatus = 'ativo' | 'encerrado';
+
 export interface Tournament {
   id: string;
   publicToken?: string;
+  publicStatus?: PublicLinkStatus;
   name: string;
   sport: SportConfig;
   format: TournamentFormat;

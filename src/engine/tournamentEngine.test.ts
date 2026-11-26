@@ -304,8 +304,8 @@ describe('King of the Court & Futsal Goals & Resets', () => {
     let t = startTournament(base, { shuffle: false });
     expect(isPublicLinkActive(t)).toBe(true);
 
-    // Finish all 4 matches with direct winner selection (0x0, no sets)
-    for (let i = 0; i < 4; i += 1) {
+    // Finish all 6 matches of the 4-team Hybrid Double-Elimination with direct winner selection (0x0, no sets)
+    while (getPlayableMatches(t).length > 0) {
       const m = getPlayableMatches(t)[0];
       t = finishMatch(t, m.id, {
         winnerId: m.teamAId!,
@@ -316,6 +316,81 @@ describe('King of the Court & Futsal Goals & Resets', () => {
     }
 
     expect(t.status).toBe('finished');
+    expect(t.publicStatus).toBe('encerrado');
     expect(isPublicLinkActive(t)).toBe(false);
+  });
+
+  it('has ZERO BYEs and all teams play Round 1 for 4, 6, 8, 12, and 16 teams, and 0 ghost slots for 5 teams', () => {
+    const futevolei = SPORT_PRESETS[0].defaultConfig;
+    const expectedMatchCounts: Record<number, number> = {
+      4: 6,
+      5: 8,
+      6: 10,
+      8: 14,
+      12: 22,
+      16: 30,
+    };
+
+    for (const [countStr, expectedTotal] of Object.entries(expectedMatchCounts)) {
+      const count = Number(countStr);
+      const base = createTournament({
+        name: `Copa ${count}`,
+        sport: futevolei,
+        format: 'bracket',
+        targetTeamsCount: count,
+        teams: makeTeams(count),
+      });
+      const started = startTournament(base, { shuffle: false });
+      const matches = getAllMatches(started);
+
+      expect(matches).toHaveLength(expectedTotal);
+      expect(matches.some((m) => m.isBye)).toBe(false);
+
+      if (count !== 5) {
+        const r1 = started.bracket!.winnersRounds[0].matches;
+        expect(r1).toHaveLength(count / 2);
+        expect(r1.every((m) => Boolean(m.teamAId && m.teamBId))).toBe(true);
+      }
+
+      const done = playAllPending(started, 'chronological');
+      expect(done.status).toBe('finished');
+      expect(done.championId).toBeDefined();
+      expect(done.runnerUpId).toBeDefined();
+      expect(done.thirdPlaceId).toBeDefined();
+      expect(done.fourthPlaceId).toBeDefined();
+    }
+  });
+
+  it('keeps multiple simultaneous tournaments independent when one finishes', () => {
+    const futevolei = SPORT_PRESETS[0].defaultConfig;
+    const t1 = startTournament(
+      createTournament({
+        name: 'Torneio A',
+        sport: futevolei,
+        format: 'bracket',
+        targetTeamsCount: 4,
+        teams: makeTeams(4),
+      }),
+    );
+    const t2 = startTournament(
+      createTournament({
+        name: 'Torneio B',
+        sport: futevolei,
+        format: 'bracket',
+        targetTeamsCount: 4,
+        teams: makeTeams(4),
+      }),
+    );
+
+    expect(t1.id).not.toBe(t2.id);
+    expect(t1.publicToken).not.toBe(t2.publicToken);
+    expect(isPublicLinkActive(t1)).toBe(true);
+    expect(isPublicLinkActive(t2)).toBe(true);
+
+    const t1Done = playAllPending(t1, 'chronological');
+    expect(isPublicLinkActive(t1Done)).toBe(false);
+    expect(t1Done.publicStatus).toBe('encerrado');
+    expect(isPublicLinkActive(t2)).toBe(true);
+    expect(t2.publicStatus).toBe('ativo');
   });
 });

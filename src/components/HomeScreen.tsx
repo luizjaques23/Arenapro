@@ -147,18 +147,17 @@ export function HomeScreen({
 
       {/* Developer Footer */}
       <footer className="mt-8 rounded-3xl bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border border-amber-200/80 dark:border-slate-800 p-5 flex flex-col items-center text-center gap-3 shadow-sm">
-        <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="flex items-center justify-center gap-2.5">
           <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
-            Desenvolvido por{' '}
-            <span className="font-extrabold text-slate-900 dark:text-white">
-              Luiz Jaques
-            </span>
+            Desenvolvido por
           </p>
           <a
             href={DEVELOPER_INSTAGRAM_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white text-xs font-extrabold shadow-md hover:opacity-95 active:scale-[0.98] transition"
+            aria-label="Instagram do desenvolvedor"
+            title="Instagram"
+            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white shadow-md hover:opacity-95 active:scale-[0.96] transition"
           >
             <svg
               viewBox="0 0 24 24"
@@ -167,14 +166,13 @@ export function HomeScreen({
               strokeWidth="2.2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="w-4 h-4"
+              className="w-5 h-5"
               aria-hidden="true"
             >
               <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
               <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
               <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
             </svg>
-            @luiz_jaques23
           </a>
         </div>
         <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">

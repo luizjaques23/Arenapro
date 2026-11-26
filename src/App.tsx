@@ -21,7 +21,12 @@ import {
   startTournament,
   updateLiveMatchState,
 } from './engine/tournamentEngine';
-import { broadcastTournamentUpdate } from './services/liveSync';
+import { upsertTournamentToCloud } from './services/cloudSync';
+import {
+  broadcastTournamentUpdate,
+  parsePublicRouteFromLocation,
+  type PublicRouteParams,
+} from './services/liveSync';
 import { soundEngine } from './services/sound';
 import {
   exportTournamentJson,
@@ -48,13 +53,9 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function App() {
-  const [publicParams] = useState<{ tournamentId: string; token: string } | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get('acompanhar');
-    const token = params.get('token');
-    return id && token ? { tournamentId: id, token } : null;
-  });
+  const [publicParams] = useState<PublicRouteParams | null>(() =>
+    parsePublicRouteFromLocation(),
+  );
 
   const [showSplash, setShowSplash] = useState(!publicParams);
   const [screen, setScreen] = useState<Screen>('home');
@@ -81,7 +82,10 @@ export function App() {
     if (publicParams) return;
     saveTournaments(tournaments);
     const active = tournaments.find((t) => t.id === activeTournamentId);
-    if (active) broadcastTournamentUpdate(active);
+    if (active) {
+      broadcastTournamentUpdate(active);
+      void upsertTournamentToCloud(active);
+    }
   }, [tournaments, publicParams, activeTournamentId]);
 
   useEffect(() => {

@@ -34,6 +34,7 @@ export function createTournament(input: CreateTournamentInput): Tournament {
   return {
     id: createId('trn'),
     publicToken: createId('pub'),
+    publicStatus: 'ativo',
     name: input.name.trim() || 'Torneio sem nome',
     sport: { ...input.sport },
     format: input.format,
@@ -77,7 +78,7 @@ function createMatchObject(params: {
   nextLoserMatchNumber?: number;
   nextLoserSlot?: 'A' | 'B';
   placementOnWin?: 1 | 3;
-  placementOnLoss?: 2 | 4;
+  placementOnLoss?: 2 | 3 | 4;
   isBye?: boolean;
   sport: SportConfig;
 }): Match {
@@ -134,7 +135,7 @@ interface HybridNodeSpec {
   nextLoserMatchNumber?: number;
   nextLoserSlot?: 'A' | 'B';
   placementOnWin?: 1 | 3;
-  placementOnLoss?: 2 | 4;
+  placementOnLoss?: 2 | 3 | 4;
 }
 
 /**
@@ -859,68 +860,101 @@ const HYBRID_8_SPECS: HybridNodeSpec[] = [
 ];
 
 /**
- * 4-Team Final Four (Semifinals + 3rd/4th + Final)
+ * 4-Team Hybrid Double-Elimination (6 Matches, 0 BYEs)
+ * All 4 teams play Round 1; losers play Repescagem; V1xV2 winner goes to Final, loser crosses into Repescagem Final.
  */
 const HYBRID_4_SPECS: HybridNodeSpec[] = [
   {
     matchNumber: 1,
-    side: 'finals',
+    side: 'winners',
     roundIndex: 0,
-    roundName: 'Semifinais',
-    stageLabel: 'Semifinal A',
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
     blockNumber: 1,
     entryAIndex: 0,
     entryBIndex: 1,
     slotALabel: 'Entrada 1',
     slotBLabel: 'Entrada 2',
-    destWinnerLabel: 'V1 → Final (4)',
-    destLoserLabel: 'P1 → 3º/4º (3)',
+    destWinnerLabel: 'V1 → Jogo 4',
+    destLoserLabel: 'P1 → Repescagem (3)',
     nextWinnerMatchNumber: 4,
     nextWinnerSlot: 'A',
     nextLoserMatchNumber: 3,
-    nextLoserSlot: 'A',
+    nextLoserSlot: 'B',
   },
   {
     matchNumber: 2,
-    side: 'finals',
+    side: 'winners',
     roundIndex: 0,
-    roundName: 'Semifinais',
-    stageLabel: 'Semifinal B',
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
     blockNumber: 1,
     entryAIndex: 2,
     entryBIndex: 3,
     slotALabel: 'Entrada 3',
     slotBLabel: 'Entrada 4',
-    destWinnerLabel: 'V2 → Final (4)',
-    destLoserLabel: 'P2 → 3º/4º (3)',
+    destWinnerLabel: 'V2 → Jogo 4',
+    destLoserLabel: 'P2 → Repescagem (3)',
     nextWinnerMatchNumber: 4,
     nextWinnerSlot: 'B',
     nextLoserMatchNumber: 3,
-    nextLoserSlot: 'B',
+    nextLoserSlot: 'A',
   },
   {
     matchNumber: 3,
-    side: 'finals',
-    roundIndex: 1,
-    roundName: 'Finais (1º ao 4º)',
-    stageLabel: 'Disputa de 3º/4º',
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
     blockNumber: 2,
-    slotALabel: 'P1',
-    slotBLabel: 'P2',
-    destWinnerLabel: '3º Lugar',
+    slotALabel: 'P2',
+    slotBLabel: 'P1',
+    destWinnerLabel: 'V3 → Jogo 5',
     destLoserLabel: '4º Lugar',
-    placementOnWin: 3,
+    nextWinnerMatchNumber: 5,
+    nextWinnerSlot: 'B',
     placementOnLoss: 4,
   },
   {
     matchNumber: 4,
-    side: 'finals',
+    side: 'winners',
     roundIndex: 1,
-    roundName: 'Finais (1º ao 4º)',
-    stageLabel: 'Final (1º/2º)',
+    roundName: 'Classificatório Vencedores',
+    stageLabel: 'Classif. Vencedores',
     blockNumber: 2,
     slotALabel: 'V1',
     slotBLabel: 'V2',
+    destWinnerLabel: 'V4 → Final (6)',
+    destLoserLabel: 'P4 → Repescagem (5)',
+    nextWinnerMatchNumber: 6,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 5,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 5,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Classificatório Repescagem',
+    stageLabel: 'Classif. Repescagem',
+    blockNumber: 3,
+    slotALabel: 'P4',
+    slotBLabel: 'V3',
+    destWinnerLabel: 'V5 → Final (6)',
+    destLoserLabel: '3º Lugar',
+    nextWinnerMatchNumber: 6,
+    nextWinnerSlot: 'B',
+    placementOnLoss: 3,
+  },
+  {
+    matchNumber: 6,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Grande Final',
+    stageLabel: 'Final (1º/2º)',
+    blockNumber: 4,
+    slotALabel: 'V4',
+    slotBLabel: 'V5',
     destWinnerLabel: 'Campeão (1º)',
     destLoserLabel: 'Vice (2º)',
     placementOnWin: 1,
@@ -929,16 +963,666 @@ const HYBRID_4_SPECS: HybridNodeSpec[] = [
 ];
 
 /**
- * Distributes N teams into `size` entry slots (4, 8, or 16) so that:
- * - When N === size: exact 1..size order is preserved.
- * - When N < size: every R1 match gets at least one real team before any match gets a second team,
- *   distributing BYEs evenly across top and bottom halves so no two BYEs face each other in R1.
+ * 5-Team Lean Hybrid Double-Elimination (8 Matches, 0 ghost slots)
+ * E1xE2 and E3xE4 play R1; E5 enters R2 against V1; losers play Repescagem -> Semifinals -> 3rd/4th + Final.
  */
-function buildEntrySlots(teamIds: string[], size: 4 | 8 | 16): Array<string | 'BYE'> {
+const HYBRID_5_SPECS: HybridNodeSpec[] = [
+  {
+    matchNumber: 1,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 0,
+    entryBIndex: 1,
+    slotALabel: 'Entrada 1',
+    slotBLabel: 'Entrada 2',
+    destWinnerLabel: 'V1 → Jogo 3',
+    destLoserLabel: 'P1 → Repescagem (4)',
+    nextWinnerMatchNumber: 3,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 4,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 2,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 2,
+    entryBIndex: 3,
+    slotALabel: 'Entrada 3',
+    slotBLabel: 'Entrada 4',
+    destWinnerLabel: 'V2 → Semifinal B (6)',
+    destLoserLabel: 'P2 → Repescagem (4)',
+    nextWinnerMatchNumber: 6,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 4,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 3,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Rodada 2',
+    stageLabel: 'Classif. Vencedores',
+    blockNumber: 2,
+    entryBIndex: 4,
+    slotALabel: 'V1',
+    slotBLabel: 'Entrada 5',
+    destWinnerLabel: 'V3 → Semifinal A (5)',
+    destLoserLabel: 'P3 → Semifinal B (6)',
+    nextWinnerMatchNumber: 5,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 6,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 4,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P2',
+    slotBLabel: 'P1',
+    destWinnerLabel: 'V4 → Semifinal A (5)',
+    destLoserLabel: 'Eliminado (5º)',
+    nextWinnerMatchNumber: 5,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 5,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal A',
+    blockNumber: 3,
+    slotALabel: 'V3',
+    slotBLabel: 'V4',
+    destWinnerLabel: 'V5 → Final (8)',
+    destLoserLabel: 'P5 → 3º/4º (7)',
+    nextWinnerMatchNumber: 8,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 7,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 6,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal B',
+    blockNumber: 3,
+    slotALabel: 'V2',
+    slotBLabel: 'P3',
+    destWinnerLabel: 'V6 → Final (8)',
+    destLoserLabel: 'P6 → 3º/4º (7)',
+    nextWinnerMatchNumber: 8,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 7,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 7,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Disputa de 3º/4º',
+    blockNumber: 4,
+    slotALabel: 'P5',
+    slotBLabel: 'P6',
+    destWinnerLabel: '3º Lugar',
+    destLoserLabel: '4º Lugar',
+    placementOnWin: 3,
+    placementOnLoss: 4,
+  },
+  {
+    matchNumber: 8,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Final (1º/2º)',
+    blockNumber: 4,
+    slotALabel: 'V5',
+    slotBLabel: 'V6',
+    destWinnerLabel: 'Campeão (1º)',
+    destLoserLabel: 'Vice (2º)',
+    placementOnWin: 1,
+    placementOnLoss: 2,
+  },
+];
+
+/**
+ * 6-Team Hybrid Double-Elimination (10 Matches, 0 BYEs)
+ * All 6 teams play R1; P1..P3 enter Repescagem R1/R2; V5, V3, V6, P5 contest Semifinals -> 3rd/4th + Final.
+ */
+const HYBRID_6_SPECS: HybridNodeSpec[] = [
+  {
+    matchNumber: 1,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 0,
+    entryBIndex: 1,
+    slotALabel: 'Entrada 1',
+    slotBLabel: 'Entrada 2',
+    destWinnerLabel: 'V1 → Jogo 5',
+    destLoserLabel: 'P1 → Repescagem (4)',
+    nextWinnerMatchNumber: 5,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 4,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 2,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 2,
+    entryBIndex: 3,
+    slotALabel: 'Entrada 3',
+    slotBLabel: 'Entrada 4',
+    destWinnerLabel: 'V2 → Jogo 5',
+    destLoserLabel: 'P2 → Repescagem (4)',
+    nextWinnerMatchNumber: 5,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 4,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 3,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 4,
+    entryBIndex: 5,
+    slotALabel: 'Entrada 5',
+    slotBLabel: 'Entrada 6',
+    destWinnerLabel: 'V3 → Semifinal B (8)',
+    destLoserLabel: 'P3 → Repescagem (6)',
+    nextWinnerMatchNumber: 8,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 6,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 4,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P2',
+    slotBLabel: 'P1',
+    destWinnerLabel: 'V4 → Jogo 6',
+    destLoserLabel: 'Eliminado (6º)',
+    nextWinnerMatchNumber: 6,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 5,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Classificatório Vencedores',
+    stageLabel: 'Classif. Vencedores',
+    blockNumber: 2,
+    slotALabel: 'V1',
+    slotBLabel: 'V2',
+    destWinnerLabel: 'V5 → Semifinal A (7)',
+    destLoserLabel: 'P5 → Semifinal B (8)',
+    nextWinnerMatchNumber: 7,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 8,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 6,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Classificatório Repescagem',
+    stageLabel: 'Repescagem R2',
+    blockNumber: 3,
+    slotALabel: 'P3',
+    slotBLabel: 'V4',
+    destWinnerLabel: 'V6 → Semifinal A (7)',
+    destLoserLabel: 'Eliminado (5º)',
+    nextWinnerMatchNumber: 7,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 7,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal A',
+    blockNumber: 4,
+    slotALabel: 'V5',
+    slotBLabel: 'V6',
+    destWinnerLabel: 'V7 → Final (10)',
+    destLoserLabel: 'P7 → 3º/4º (9)',
+    nextWinnerMatchNumber: 10,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 9,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 8,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal B',
+    blockNumber: 4,
+    slotALabel: 'V3',
+    slotBLabel: 'P5',
+    destWinnerLabel: 'V8 → Final (10)',
+    destLoserLabel: 'P8 → 3º/4º (9)',
+    nextWinnerMatchNumber: 10,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 9,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 9,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Disputa de 3º/4º',
+    blockNumber: 5,
+    slotALabel: 'P7',
+    slotBLabel: 'P8',
+    destWinnerLabel: '3º Lugar',
+    destLoserLabel: '4º Lugar',
+    placementOnWin: 3,
+    placementOnLoss: 4,
+  },
+  {
+    matchNumber: 10,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Final (1º/2º)',
+    blockNumber: 5,
+    slotALabel: 'V7',
+    slotBLabel: 'V8',
+    destWinnerLabel: 'Campeão (1º)',
+    destLoserLabel: 'Vice (2º)',
+    placementOnWin: 1,
+    placementOnLoss: 2,
+  },
+];
+
+/**
+ * 12-Team Hybrid Double-Elimination (22 Matches, 0 BYEs)
+ * All 12 teams play R1; inverted Repescagem R1; anti-revanche crossover into Semifinals -> 3rd/4th + Final.
+ */
+const HYBRID_12_SPECS: HybridNodeSpec[] = [
+  // R1 Vencedores (1..6)
+  {
+    matchNumber: 1,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 0,
+    entryBIndex: 1,
+    slotALabel: 'Entrada 1',
+    slotBLabel: 'Entrada 2',
+    destWinnerLabel: 'V1 → Jogo 10',
+    destLoserLabel: 'P1 → Jogo 9',
+    nextWinnerMatchNumber: 10,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 9,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 2,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 2,
+    entryBIndex: 3,
+    slotALabel: 'Entrada 3',
+    slotBLabel: 'Entrada 4',
+    destWinnerLabel: 'V2 → Jogo 10',
+    destLoserLabel: 'P2 → Jogo 9',
+    nextWinnerMatchNumber: 10,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 9,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 3,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 4,
+    entryBIndex: 5,
+    slotALabel: 'Entrada 5',
+    slotBLabel: 'Entrada 6',
+    destWinnerLabel: 'V3 → Jogo 11',
+    destLoserLabel: 'P3 → Jogo 8',
+    nextWinnerMatchNumber: 11,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 8,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 4,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 6,
+    entryBIndex: 7,
+    slotALabel: 'Entrada 7',
+    slotBLabel: 'Entrada 8',
+    destWinnerLabel: 'V4 → Jogo 11',
+    destLoserLabel: 'P4 → Jogo 8',
+    nextWinnerMatchNumber: 11,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 8,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 5,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 8,
+    entryBIndex: 9,
+    slotALabel: 'Entrada 9',
+    slotBLabel: 'Entrada 10',
+    destWinnerLabel: 'V5 → Jogo 12',
+    destLoserLabel: 'P5 → Jogo 7',
+    nextWinnerMatchNumber: 12,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 7,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 6,
+    side: 'winners',
+    roundIndex: 0,
+    roundName: 'Rodada 1',
+    stageLabel: 'Rodada 1',
+    blockNumber: 1,
+    entryAIndex: 10,
+    entryBIndex: 11,
+    slotALabel: 'Entrada 11',
+    slotBLabel: 'Entrada 12',
+    destWinnerLabel: 'V6 → Jogo 12',
+    destLoserLabel: 'P6 → Jogo 7',
+    nextWinnerMatchNumber: 12,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 7,
+    nextLoserSlot: 'A',
+  },
+  // Repescagem R1 invertida (7..9)
+  {
+    matchNumber: 7,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P6',
+    slotBLabel: 'P5',
+    destWinnerLabel: 'V7 → Jogo 13',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 13,
+    nextWinnerSlot: 'A',
+  },
+  {
+    matchNumber: 8,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P4',
+    slotBLabel: 'P3',
+    destWinnerLabel: 'V8 → Jogo 14',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 14,
+    nextWinnerSlot: 'A',
+  },
+  {
+    matchNumber: 9,
+    side: 'losers',
+    roundIndex: 0,
+    roundName: 'Repescagem R1',
+    stageLabel: 'Repescagem R1',
+    blockNumber: 2,
+    slotALabel: 'P2',
+    slotBLabel: 'P1',
+    destWinnerLabel: 'V9 → Jogo 15',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 15,
+    nextWinnerSlot: 'A',
+  },
+  // R2 Vencedores (10..12)
+  {
+    matchNumber: 10,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Rodada 2',
+    stageLabel: 'Rodada 2',
+    blockNumber: 2,
+    slotALabel: 'V1',
+    slotBLabel: 'V2',
+    destWinnerLabel: 'V10 → Jogo 16',
+    destLoserLabel: 'P10 → Jogo 13',
+    nextWinnerMatchNumber: 16,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 13,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 11,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Rodada 2',
+    stageLabel: 'Rodada 2',
+    blockNumber: 2,
+    slotALabel: 'V3',
+    slotBLabel: 'V4',
+    destWinnerLabel: 'V11 → Jogo 16',
+    destLoserLabel: 'P11 → Jogo 14',
+    nextWinnerMatchNumber: 16,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 14,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 12,
+    side: 'winners',
+    roundIndex: 1,
+    roundName: 'Rodada 2',
+    stageLabel: 'Rodada 2',
+    blockNumber: 2,
+    slotALabel: 'V5',
+    slotBLabel: 'V6',
+    destWinnerLabel: 'V12 → Semifinal B (20)',
+    destLoserLabel: 'P12 → Jogo 15',
+    nextWinnerMatchNumber: 20,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 15,
+    nextLoserSlot: 'B',
+  },
+  // Repescagem R2 (13..15)
+  {
+    matchNumber: 13,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Repescagem R2',
+    stageLabel: 'Repescagem R2',
+    blockNumber: 3,
+    slotALabel: 'V7',
+    slotBLabel: 'P10',
+    destWinnerLabel: 'V13 → Jogo 17',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 17,
+    nextWinnerSlot: 'A',
+  },
+  {
+    matchNumber: 14,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Repescagem R2',
+    stageLabel: 'Repescagem R2',
+    blockNumber: 3,
+    slotALabel: 'V8',
+    slotBLabel: 'P11',
+    destWinnerLabel: 'V14 → Jogo 17',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 17,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 15,
+    side: 'losers',
+    roundIndex: 1,
+    roundName: 'Repescagem R2',
+    stageLabel: 'Repescagem R2',
+    blockNumber: 3,
+    slotALabel: 'V9',
+    slotBLabel: 'P12',
+    destWinnerLabel: 'V15 → Semifinal A (19)',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 19,
+    nextWinnerSlot: 'B',
+  },
+  // Classificatório Vencedores (16) & Repescagem R3 (17)
+  {
+    matchNumber: 16,
+    side: 'winners',
+    roundIndex: 2,
+    roundName: 'Classificatório Vencedores',
+    stageLabel: 'Classif. Vencedores',
+    blockNumber: 3,
+    slotALabel: 'V10',
+    slotBLabel: 'V11',
+    destWinnerLabel: 'V16 → Semifinal A (19)',
+    destLoserLabel: 'P16 → Jogo 18',
+    nextWinnerMatchNumber: 19,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 18,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 17,
+    side: 'losers',
+    roundIndex: 2,
+    roundName: 'Repescagem R3',
+    stageLabel: 'Repescagem R3',
+    blockNumber: 4,
+    slotALabel: 'V13',
+    slotBLabel: 'V14',
+    destWinnerLabel: 'V17 → Jogo 18',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 18,
+    nextWinnerSlot: 'B',
+  },
+  {
+    matchNumber: 18,
+    side: 'losers',
+    roundIndex: 3,
+    roundName: 'Classificatório Repescagem',
+    stageLabel: 'Classif. Repescagem',
+    blockNumber: 5,
+    slotALabel: 'P16',
+    slotBLabel: 'V17',
+    destWinnerLabel: 'V18 → Semifinal B (20)',
+    destLoserLabel: 'Eliminado',
+    nextWinnerMatchNumber: 20,
+    nextWinnerSlot: 'B',
+  },
+  // Fase Final (19..22)
+  {
+    matchNumber: 19,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal A',
+    blockNumber: 6,
+    slotALabel: 'V16',
+    slotBLabel: 'V15',
+    destWinnerLabel: 'V19 → Final (22)',
+    destLoserLabel: 'P19 → 3º/4º (21)',
+    nextWinnerMatchNumber: 22,
+    nextWinnerSlot: 'A',
+    nextLoserMatchNumber: 21,
+    nextLoserSlot: 'A',
+  },
+  {
+    matchNumber: 20,
+    side: 'finals',
+    roundIndex: 0,
+    roundName: 'Semifinais',
+    stageLabel: 'Semifinal B',
+    blockNumber: 6,
+    slotALabel: 'V12',
+    slotBLabel: 'V18',
+    destWinnerLabel: 'V20 → Final (22)',
+    destLoserLabel: 'P20 → 3º/4º (21)',
+    nextWinnerMatchNumber: 22,
+    nextWinnerSlot: 'B',
+    nextLoserMatchNumber: 21,
+    nextLoserSlot: 'B',
+  },
+  {
+    matchNumber: 21,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Disputa de 3º/4º',
+    blockNumber: 7,
+    slotALabel: 'P19',
+    slotBLabel: 'P20',
+    destWinnerLabel: '3º Lugar',
+    destLoserLabel: '4º Lugar',
+    placementOnWin: 3,
+    placementOnLoss: 4,
+  },
+  {
+    matchNumber: 22,
+    side: 'finals',
+    roundIndex: 1,
+    roundName: 'Finais (1º ao 4º)',
+    stageLabel: 'Final (1º/2º)',
+    blockNumber: 7,
+    slotALabel: 'V19',
+    slotBLabel: 'V20',
+    destWinnerLabel: 'Campeão (1º)',
+    destLoserLabel: 'Vice (2º)',
+    placementOnWin: 1,
+    placementOnLoss: 2,
+  },
+];
+
+function buildEntrySlots(teamIds: string[], size: number): Array<string | 'BYE'> {
   if (teamIds.length === size) {
     return [...teamIds];
   }
-  const matchCount = size / 2;
+  const matchCount = Math.floor(size / 2);
   const slots: Array<string | 'BYE'> = Array.from({ length: size }, () => 'BYE');
 
   const spreadOrder =
@@ -946,15 +1630,13 @@ function buildEntrySlots(teamIds: string[], size: 4 | 8 | 16): Array<string | 'B
       ? [0, 4, 2, 6, 1, 5, 3, 7]
       : matchCount === 4
         ? [0, 2, 1, 3]
-        : [0, 1];
+        : Array.from({ length: matchCount }, (_, i) => i);
 
   let idx = 0;
-  // First put 1 team in slot A of each R1 match
   for (let m = 0; m < matchCount && idx < teamIds.length; m += 1) {
     const matchIdx = spreadOrder[m];
     slots[matchIdx * 2] = teamIds[idx++];
   }
-  // Then fill slot B across evenly spread matches
   for (let m = 0; m < matchCount && idx < teamIds.length; m += 1) {
     const matchIdx = spreadOrder[m];
     slots[matchIdx * 2 + 1] = teamIds[idx++];
@@ -964,7 +1646,7 @@ function buildEntrySlots(teamIds: string[], size: 4 | 8 | 16): Array<string | 'B
 
 function buildHybridBracketState(
   teamIds: string[],
-  size: 4 | 8 | 16,
+  size: number,
   specs: HybridNodeSpec[],
   sport: SportConfig,
 ): BracketState {
@@ -1166,6 +1848,7 @@ function propagateHybridBracket(tournament: Tournament): Tournament {
       if (m.placementOnWin === 1 && m.winnerId) championId = m.winnerId;
       if (m.placementOnLoss === 2 && m.loserId) runnerUpId = m.loserId;
       if (m.placementOnWin === 3 && m.winnerId) thirdPlaceId = m.winnerId;
+      if (m.placementOnLoss === 3 && m.loserId) thirdPlaceId = m.loserId;
       if (m.placementOnLoss === 4 && m.loserId) fourthPlaceId = m.loserId;
     }
   }
@@ -1179,6 +1862,7 @@ function propagateHybridBracket(tournament: Tournament): Tournament {
   return {
     ...tournament,
     status: allDone ? 'finished' : tournament.status,
+    publicStatus: allDone ? 'encerrado' : 'ativo',
     finishedAt: allDone ? (tournament.finishedAt ?? Date.now()) : tournament.finishedAt,
     championId,
     runnerUpId,
@@ -1332,19 +2016,30 @@ export function startTournament(
     };
   }
 
-  // Hybrid Fixed Graph for 3..16 teams (4, 8, or 16-team official 30-match structure)
-  if (teamIds.length >= 3 && teamIds.length <= 16) {
-    const bracket =
-      teamIds.length <= 4
-        ? buildHybridBracketState(teamIds, 4, HYBRID_4_SPECS, tournament.sport)
-        : teamIds.length <= 8
-          ? buildHybridBracketState(teamIds, 8, HYBRID_8_SPECS, tournament.sport)
-          : buildHybridBracketState(teamIds, 16, HYBRID_16_SPECS, tournament.sport);
+  // Exact Hybrid Fixed Graphs for 4, 5, 6, 8, 12, and 16 teams (zero ghost slots / zero undeserved BYEs)
+  const hybridMap: Record<number, HybridNodeSpec[]> = {
+    4: HYBRID_4_SPECS,
+    5: HYBRID_5_SPECS,
+    6: HYBRID_6_SPECS,
+    8: HYBRID_8_SPECS,
+    12: HYBRID_12_SPECS,
+    16: HYBRID_16_SPECS,
+  };
+  const exactSpecs = hybridMap[teamIds.length];
+
+  if (exactSpecs) {
+    const bracket = buildHybridBracketState(
+      teamIds,
+      teamIds.length,
+      exactSpecs,
+      tournament.sport,
+    );
 
     const initialized: Tournament = {
       ...tournament,
       teams: orderedTeams,
       status: 'in_progress',
+      publicStatus: 'ativo',
       updatedAt: now,
       finishedAt: undefined,
       championId: undefined,
@@ -1710,6 +2405,7 @@ export function finishTournamentManually(tournament: Tournament): Tournament {
   return {
     ...tournament,
     status: 'finished',
+    publicStatus: 'encerrado',
     updatedAt: now,
     finishedAt: now,
     championId,
@@ -1719,7 +2415,11 @@ export function finishTournamentManually(tournament: Tournament): Tournament {
 }
 
 export function isPublicLinkActive(tournament: Tournament): boolean {
-  return tournament.status !== 'finished' && Boolean(tournament.publicToken);
+  return (
+    tournament.status !== 'finished' &&
+    tournament.publicStatus !== 'encerrado' &&
+    Boolean(tournament.publicToken)
+  );
 }
 
 export function resetTournament(

@@ -1,12 +1,13 @@
-import { Lock, Radio, Trophy, XCircle } from 'lucide-react';
+import { Lock, Radio, Trophy, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { isCloudSyncEnabled } from '../services/cloudSync';
 import { subscribePublicTournament } from '../services/liveSync';
 import type { Tournament } from '../types/tournament';
 import { BracketDashboard } from './BracketDashboard';
 
 interface PublicWatchScreenProps {
   tournamentId: string;
-  token: string;
+  token: string | null;
 }
 
 export function PublicWatchScreen({ tournamentId, token }: PublicWatchScreenProps) {
@@ -26,7 +27,7 @@ export function PublicWatchScreen({ tournamentId, token }: PublicWatchScreenProp
       <main className="max-w-xl mx-auto px-4 py-16 text-center space-y-3">
         <Radio className="w-10 h-10 mx-auto text-emerald-500 animate-pulse" />
         <p className="font-bold text-slate-700 dark:text-slate-300">
-          Conectando à transmissão ao vivo...
+          Conectando ao torneio ao vivo...
         </p>
       </main>
     );
@@ -36,20 +37,22 @@ export function PublicWatchScreen({ tournamentId, token }: PublicWatchScreenProp
     return (
       <main className="max-w-lg mx-auto px-4 py-16">
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 text-center space-y-3 shadow-lg">
-          <XCircle className="w-12 h-12 mx-auto text-rose-500" />
+          <WifiOff className="w-12 h-12 mx-auto text-amber-500" />
           <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
-            Link indisponível ou expirado
+            Torneio não encontrado
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Este link público de acompanhamento não foi encontrado neste navegador ou já foi desativado.
+            {isCloudSyncEnabled()
+              ? 'Não encontramos este campeonato no banco de dados ou o token de acesso é inválido.'
+              : 'Este aparelho não possui conexão com banco em nuvem configurado (VITE_SUPABASE_URL) e o torneio não está salvo localmente neste navegador.'}
           </p>
         </div>
       </main>
     );
   }
 
-  // Automatic termination when tournament is finished
-  if (tournament.status === 'finished') {
+  // Automatic termination when this specific tournament is finished
+  if (tournament.status === 'finished' || tournament.publicStatus === 'encerrado') {
     const champ = tournament.teams.find((t) => t.id === tournament.championId);
     return (
       <main className="max-w-lg mx-auto px-4 py-14">
@@ -120,11 +123,11 @@ export function PublicWatchScreen({ tournamentId, token }: PublicWatchScreenProp
         <BracketDashboard
           tournament={tournament}
           readOnly
-          onOpenMatch={() => {}}
-          onFinishManually={() => {}}
-          onOpenResults={() => {}}
-          onExportJson={() => {}}
-          onOpenReset={() => {}}
+          onOpenMatch={() => { }}
+          onFinishManually={() => { }}
+          onOpenResults={() => { }}
+          onExportJson={() => { }}
+          onOpenReset={() => { }}
         />
       )}
     </div>
