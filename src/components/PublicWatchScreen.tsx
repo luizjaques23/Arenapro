@@ -1,6 +1,5 @@
 import { Lock, Radio, Trophy, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { isCloudSyncEnabled } from '../services/cloudSync';
 import { subscribePublicTournament } from '../services/liveSync';
 import type { Tournament } from '../types/tournament';
 import { BracketDashboard } from './BracketDashboard';
@@ -42,9 +41,7 @@ export function PublicWatchScreen({ tournamentId, token }: PublicWatchScreenProp
             Torneio não encontrado
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {isCloudSyncEnabled()
-              ? 'Não encontramos este campeonato no banco de dados ou o token de acesso é inválido.'
-              : 'Este aparelho não possui conexão com banco em nuvem configurado (VITE_SUPABASE_URL) e o torneio não está salvo localmente neste navegador.'}
+            Não foi possível carregar as informações deste campeonato. Verifique se o link compartilhado está completo ou aguarde a conexão com a rede.
           </p>
         </div>
       </main>

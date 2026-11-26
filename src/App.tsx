@@ -21,10 +21,9 @@ import {
   startTournament,
   updateLiveMatchState,
 } from './engine/tournamentEngine';
-import { upsertTournamentToCloud } from './services/cloudSync';
 import {
-  broadcastTournamentUpdate,
   parsePublicRouteFromLocation,
+  publishTournamentLive,
   type PublicRouteParams,
 } from './services/liveSync';
 import { soundEngine } from './services/sound';
@@ -83,8 +82,7 @@ export function App() {
     saveTournaments(tournaments);
     const active = tournaments.find((t) => t.id === activeTournamentId);
     if (active) {
-      broadcastTournamentUpdate(active);
-      void upsertTournamentToCloud(active);
+      void publishTournamentLive(active);
     }
   }, [tournaments, publicParams, activeTournamentId]);
 
