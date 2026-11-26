@@ -1,6 +1,8 @@
 import LZString from 'lz-string';
 import type { Tournament } from '../types/tournament';
+import { getFirebaseDatabaseUrl, isFirebaseConfigured } from './firebaseConfig';
 import { loadTournaments } from './storage';
+import { isSupabaseConfigured, supabaseConfig } from './supabaseConfig';
 
 const CHANNEL_NAME = 'arenapro_live_sync_v1';
 const RELAY_BASE_URL = 'https://ntfy.sh';
@@ -34,6 +36,79 @@ function stripSensitiveFields(tournament: Tournament): Tournament {
   return sanitized;
 }
 
+function normalizeTournamentData(raw: Tournament | null | undefined): Tournament | null {
+  if (!raw || typeof raw !== 'object' || !raw.id) return null;
+
+  const normalizeMatches = (
+    matches:
+      | (Tournament['bracket'] extends undefined
+          ? never
+          : NonNullable<Tournament['bracket']>['winnersRounds'][number]['matches'])
+      | undefined,
+  ) =>
+    (Array.isArray(matches) ? matches : []).map((m) => ({
+      ...m,
+      teamAId: m.teamAId ?? null,
+      teamBId: m.teamBId ?? null,
+      sets: Array.isArray(m.sets) ? m.sets : [],
+      events: Array.isArray(m.events) ? m.events : [],
+    }));
+
+  const normalizeRounds = (
+    rounds: NonNullable<Tournament['bracket']>['winnersRounds'] | undefined,
+  ) =>
+    (Array.isArray(rounds) ? rounds : []).map((r) => ({
+      ...r,
+      matches: normalizeMatches(r.matches),
+    }));
+
+  const normalized: Tournament = {
+    ...raw,
+    sport: {
+      ...raw.sport,
+      extraStatsEnabled: Array.isArray(raw.sport?.extraStatsEnabled)
+        ? raw.sport.extraStatsEnabled
+        : [],
+    },
+    teams: (Array.isArray(raw.teams) ? raw.teams : []).map((t) => ({
+      ...t,
+      players: Array.isArray(t.players) ? t.players : [],
+    })),
+    bracket: raw.bracket
+      ? {
+          ...raw.bracket,
+          winnersRounds: normalizeRounds(raw.bracket.winnersRounds),
+          losersRounds: normalizeRounds(raw.bracket.losersRounds),
+          finalsRounds: normalizeRounds(raw.bracket.finalsRounds),
+          losersAdvancingPool: Array.isArray(raw.bracket.losersAdvancingPool)
+            ? raw.bracket.losersAdvancingPool
+            : [],
+          losersStagingPool: Array.isArray(raw.bracket.losersStagingPool)
+            ? raw.bracket.losersStagingPool
+            : [],
+          byeHistoryTeamIds: Array.isArray(raw.bracket.byeHistoryTeamIds)
+            ? raw.bracket.byeHistoryTeamIds
+            : [],
+          eliminated: Array.isArray(raw.bracket.eliminated) ? raw.bracket.eliminated : [],
+        }
+      : undefined,
+    kingOfCourt: raw.kingOfCourt
+      ? {
+          ...raw.kingOfCourt,
+          courtTeamAId: raw.kingOfCourt.courtTeamAId ?? null,
+          courtTeamBId: raw.kingOfCourt.courtTeamBId ?? null,
+          currentMatchId: raw.kingOfCourt.currentMatchId ?? null,
+          currentKingTeamId: raw.kingOfCourt.currentKingTeamId ?? null,
+          queue: Array.isArray(raw.kingOfCourt.queue) ? raw.kingOfCourt.queue : [],
+          matches: normalizeMatches(raw.kingOfCourt.matches),
+          bestStreakByTeam: raw.kingOfCourt.bestStreakByTeam ?? {},
+        }
+      : undefined,
+  };
+
+  return stripSensitiveFields(normalized);
+}
+
 export function encodeSnapshot(tournament: Tournament): string {
   try {
     const json = JSON.stringify(stripSensitiveFields(tournament));
@@ -48,7 +123,7 @@ export function decodeCompressedSnapshot(raw: string): Tournament | null {
   try {
     const decompressed = LZString.decompressFromEncodedURIComponent(raw);
     if (decompressed) {
-      return JSON.parse(decompressed) as Tournament;
+      return normalizeTournamentData(JSON.parse(decompressed) as Tournament);
     }
 
     const base64 = raw.replace(/-/g, '+').replace(/_/g, '/');
@@ -58,7 +133,7 @@ export function decodeCompressedSnapshot(raw: string): Tournament | null {
       bytes[i] = binary.charCodeAt(i);
     }
     const json = new TextDecoder().decode(bytes);
-    return JSON.parse(json) as Tournament;
+    return normalizeTournamentData(JSON.parse(json) as Tournament);
   } catch {
     return null;
   }
@@ -88,7 +163,6 @@ export function buildPublicWatchUrl(tournament: Tournament, baseOrigin?: string)
     baseOrigin ??
     (typeof window !== 'undefined' ? window.location.href : 'https://arenapro.local/');
   const url = new URL(origin);
-  // Preserve deployment base pathname (e.g., /Arenapro/ on GitHub Pages) while stripping /acompanhar/:id
   const cleanedPath = url.pathname.replace(/\/acompanhar\/[^/]+\/?$/, '/');
   url.pathname = cleanedPath || '/';
   url.search = '';
@@ -98,9 +172,12 @@ export function buildPublicWatchUrl(tournament: Tournament, baseOrigin?: string)
     url.searchParams.set('token', tournament.publicToken);
   }
 
-  const snap = encodeSnapshot(tournament);
-  if (snap) {
-    url.hash = `d=${snap}`;
+  // Se nenhum banco em nuvem estiver conectado ainda, embute o snapshot comprimido no hash
+  if (!isSupabaseConfigured() && !isFirebaseConfigured()) {
+    const snap = encodeSnapshot(tournament);
+    if (snap) {
+      url.hash = `d=${snap}`;
+    }
   }
   return url.toString();
 }
@@ -108,6 +185,13 @@ export function buildPublicWatchUrl(tournament: Tournament, baseOrigin?: string)
 function getRelayTopic(tournamentId: string): string {
   const safeId = tournamentId.replace(/[^a-zA-Z0-9_-]/g, '_');
   return `arenapro_t_${safeId}`;
+}
+
+function getFirebaseTournamentEndpoint(tournamentId: string): string | null {
+  const baseUrl = getFirebaseDatabaseUrl();
+  if (!baseUrl) return null;
+  const safeId = encodeURIComponent(tournamentId.replace(/[.#$[\]/]/g, '_'));
+  return `${baseUrl}/tournaments/${safeId}.json`;
 }
 
 export async function publishTournamentLive(tournament: Tournament): Promise<void> {
@@ -118,37 +202,77 @@ export async function publishTournamentLive(tournament: Tournament): Promise<voi
     publicStatus: isFinished ? 'encerrado' : 'ativo',
   });
 
-  // 1. Broadcast locally for instant multi-tab/same-device reflection
+  // 1. Broadcast local para abas no mesmo aparelho
   if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
     try {
       const ch = new BroadcastChannel(CHANNEL_NAME);
       ch.postMessage({ type: 'TOURNAMENT_SYNC', tournament: updatedTournament });
       ch.close();
     } catch {
-      // Ignore BroadcastChannel errors
+      // Ignore
     }
   }
 
-  // 2. Publish compressed snapshot to free zero-config serverless relay (stays <4KB for all sizes)
+  // 2. Se o banco SQL (Supabase) estiver configurado, salva na tabela public.tournaments
+  if (isSupabaseConfigured()) {
+    try {
+      const baseUrl = supabaseConfig.url.replace(/\/+$/, '');
+      await fetch(`${baseUrl}/rest/v1/tournaments?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseConfig.anonKey,
+          Authorization: `Bearer ${supabaseConfig.anonKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({
+          id: tournament.id,
+          public_token: tournament.publicToken ?? null,
+          public_status: updatedTournament.publicStatus,
+          data: updatedTournament,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+    } catch {
+      // Ignora falhas temporárias de rede
+    }
+  }
+
+  // 3. Se o Firebase Realtime Database estiver configurado, salva no endpoint REST
+  if (isFirebaseConfigured()) {
+    const fbEndpoint = getFirebaseTournamentEndpoint(tournament.id);
+    if (fbEndpoint) {
+      try {
+        await fetch(fbEndpoint, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedTournament),
+        });
+      } catch {
+        // Ignora
+      }
+    }
+  }
+
+  // 4. Sempre envia também ao relay público leve para garantir sincronização entre celulares
   try {
     const topic = getRelayTopic(tournament.id);
     const compressed = encodeSnapshot(updatedTournament);
-    if (!compressed) return;
-    const payload = JSON.stringify({
-      z: compressed,
-      ts: updatedTournament.updatedAt ?? Date.now(),
-    });
-
-    await fetch(`${RELAY_BASE_URL}/${topic}`, {
-      method: 'POST',
-      body: payload,
-      headers: {
-        Title: 'ArenaPro Live Update',
-        Priority: 'default',
-      },
-    });
+    if (compressed) {
+      await fetch(`${RELAY_BASE_URL}/${topic}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          z: compressed,
+          ts: updatedTournament.updatedAt ?? Date.now(),
+        }),
+        headers: {
+          Title: 'ArenaPro Live Update',
+          Priority: 'default',
+        },
+      });
+    }
   } catch {
-    // Network offline: local storage & URL snapshot remain active
+    // Ignora
   }
 }
 
@@ -191,13 +315,14 @@ export function subscribePublicTournament(
   let bestTournament: Tournament | null = null;
 
   const validateTournament = (t: Tournament | null): Tournament | null => {
-    if (!t || typeof t !== 'object') return null;
-    if (t.id !== tournamentId) return null;
-    if (token && t.publicToken && t.publicToken !== token) return null;
-    return stripSensitiveFields(t);
+    const normalized = normalizeTournamentData(t);
+    if (!normalized) return null;
+    if (normalized.id !== tournamentId) return null;
+    if (token && normalized.publicToken && normalized.publicToken !== token) return null;
+    return normalized;
   };
 
-  const applyCandidate = (candidate: Tournament | null) => {
+  const applyCandidate = (candidate: Tournament | null): boolean => {
     const valid = validateTournament(candidate);
     if (!valid || cancelled) return false;
 
@@ -213,57 +338,113 @@ export function subscribePublicTournament(
     return false;
   };
 
-  // 1. Check snapshot from URL hash first for instant zero-latency load
+  // 1. Carrega imediatamente do snapshot da URL e do localStorage local
   applyCandidate(decodeSnapshotFromHash());
-
-  // 2. Check local storage (overrides hash if local state is newer)
   applyCandidate(readPublicTournamentFromStorage(tournamentId, token));
 
-  // 3. Connect to free serverless relay for cross-device live updates
-  const topic = getRelayTopic(tournamentId);
+  // 2. Busca no banco SQL (Supabase) se estiver configurado
+  const pollSupabase = async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const baseUrl = supabaseConfig.url.replace(/\/+$/, '');
+      const res = await fetch(
+        `${baseUrl}/rest/v1/tournaments?id=eq.${tournamentId}&select=id,public_token,public_status,data`,
+        {
+          headers: {
+            apikey: supabaseConfig.anonKey,
+            Authorization: `Bearer ${supabaseConfig.anonKey}`,
+          },
+          cache: 'no-store',
+        },
+      );
+      if (cancelled || !res.ok) return;
+      const rows = (await res.json()) as Array<{ data?: Tournament }>;
+      if (rows?.[0]?.data) {
+        applyCandidate(rows[0].data);
+      }
+    } catch {
+      // Ignora erro de rede temporário
+    }
+  };
 
+  // 3. Busca no Firebase se estiver configurado
+  const fbEndpoint = getFirebaseTournamentEndpoint(tournamentId);
+  const pollFirebase = async () => {
+    if (!fbEndpoint) return;
+    try {
+      const res = await fetch(fbEndpoint, { cache: 'no-store' });
+      if (cancelled || !res.ok) return;
+      const data = (await res.json()) as Tournament | null;
+      if (data) applyCandidate(data);
+    } catch {
+      // Ignora
+    }
+  };
+
+  // 4. Busca no relay público de alta velocidade
+  const topic = getRelayTopic(tournamentId);
   const pollRelay = async () => {
     try {
       const res = await fetch(`${RELAY_BASE_URL}/${topic}/json?poll=1`, {
         cache: 'no-store',
       });
-      if (cancelled) return;
-      if (res.ok) {
-        const text = await res.text();
-        const lines = text.trim().split('\n').filter(Boolean);
-        for (let i = lines.length - 1; i >= 0; i -= 1) {
-          const remoteTournament = extractRelayTournament(lines[i]);
-          if (applyCandidate(remoteTournament)) {
-            return;
-          }
-        }
+      if (cancelled || !res.ok) return;
+      const text = await res.text();
+      const lines = text.trim().split('\n').filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        const remoteTournament = extractRelayTournament(lines[i]);
+        if (applyCandidate(remoteTournament)) return;
       }
     } catch {
-      // Offline fallback
+      // Ignora
     }
     if (!cancelled && !bestTournament) {
       onUpdate(null);
     }
   };
 
+  void pollSupabase();
+  void pollFirebase();
   void pollRelay();
 
-  // 4. Live Server-Sent Events (SSE) stream for real-time updates without polling
-  let eventSource: EventSource | null = null;
+  // 5. Streams em tempo real (SSE) do Relay e Firebase
+  let relayEventSource: EventSource | null = null;
   if (typeof EventSource !== 'undefined') {
     try {
-      eventSource = new EventSource(`${RELAY_BASE_URL}/${topic}/sse`);
-      eventSource.onmessage = (event) => {
+      relayEventSource = new EventSource(`${RELAY_BASE_URL}/${topic}/sse`);
+      relayEventSource.onmessage = (event) => {
         if (cancelled) return;
-        const remoteTournament = extractRelayTournament(event.data);
-        applyCandidate(remoteTournament);
+        const remote = extractRelayTournament(event.data);
+        applyCandidate(remote);
       };
     } catch {
-      eventSource = null;
+      relayEventSource = null;
     }
   }
 
-  // 5. BroadcastChannel & storage event for same-device/same-browser multi-window sync
+  let fbEventSource: EventSource | null = null;
+  if (fbEndpoint && typeof EventSource !== 'undefined') {
+    try {
+      fbEventSource = new EventSource(fbEndpoint);
+      fbEventSource.addEventListener('put', (event: MessageEvent) => {
+        if (cancelled) return;
+        try {
+          const payload = JSON.parse(event.data) as { path?: string; data?: Tournament };
+          if (payload?.path === '/' && payload.data) {
+            applyCandidate(payload.data);
+          } else if (payload?.path && payload.path !== '/') {
+            void pollFirebase();
+          }
+        } catch {
+          // Ignora
+        }
+      });
+    } catch {
+      fbEventSource = null;
+    }
+  }
+
+  // 6. BroadcastChannel para comunicação local
   let ch: BroadcastChannel | null = null;
   if (typeof BroadcastChannel !== 'undefined') {
     try {
@@ -280,31 +461,23 @@ export function subscribePublicTournament(
     }
   }
 
-  const handleStorage = () => {
-    if (cancelled) return;
-    applyCandidate(readPublicTournamentFromStorage(tournamentId, token));
-  };
-  if (typeof window !== 'undefined') {
-    window.addEventListener('storage', handleStorage);
-  }
-
-  // Periodic lightweight check every 6 seconds as safety net
+  // Polling leve a cada 5s para manter atualizado
   const pollTimer =
     typeof window !== 'undefined'
       ? window.setInterval(() => {
           if (!cancelled) {
+            void pollSupabase();
+            void pollFirebase();
             void pollRelay();
           }
-        }, 6000)
+        }, 5000)
       : undefined;
 
   return () => {
     cancelled = true;
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('storage', handleStorage);
-      if (pollTimer !== undefined) window.clearInterval(pollTimer);
-    }
-    if (eventSource) eventSource.close();
+    if (pollTimer !== undefined) window.clearInterval(pollTimer);
+    if (relayEventSource) relayEventSource.close();
+    if (fbEventSource) fbEventSource.close();
     if (ch) ch.close();
   };
 }
