@@ -140,11 +140,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                   key={preset.id}
                   type="button"
                   onClick={() => handleSelectSport(preset.id)}
-                  className={`p-3.5 rounded-2xl border-2 text-left transition active:scale-[0.98] ${
-                    selected
+                  className={`p-3.5 rounded-2xl border-2 text-left transition active:scale-[0.98] ${selected
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
                       : 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-extrabold text-sm text-slate-900 dark:text-white">
@@ -176,11 +175,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                     setScoringMode('sets');
                     setTrackPlayerGoals(false);
                   }}
-                  className={`h-11 rounded-xl text-xs font-bold border-2 ${
-                    scoringMode === 'sets'
+                  className={`h-11 rounded-xl text-xs font-bold border-2 ${scoringMode === 'sets'
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
                       : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                  }`}
+                    }`}
                 >
                   Pontos / Sets
                 </button>
@@ -190,11 +188,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                     setScoringMode('goals');
                     setTrackPlayerGoals(true);
                   }}
-                  className={`h-11 rounded-xl text-xs font-bold border-2 ${
-                    scoringMode === 'goals'
+                  className={`h-11 rounded-xl text-xs font-bold border-2 ${scoringMode === 'goals'
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
                       : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                  }`}
+                    }`}
                 >
                   Gols + Artilheiro
                 </button>
@@ -222,11 +219,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                       key={val}
                       type="button"
                       onClick={() => setSetsToWin(val)}
-                      className={`flex-1 h-10 rounded-xl text-xs font-extrabold border-2 ${
-                        setsToWin === val
+                      className={`flex-1 h-10 rounded-xl text-xs font-extrabold border-2 ${setsToWin === val
                           ? 'border-emerald-500 bg-emerald-500 text-slate-950'
                           : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                      }`}
+                        }`}
                     >
                       {val === 1 ? '1 Set' : 'Melhor de 3'}
                     </button>
@@ -263,11 +259,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
                 <button
                   type="button"
                   onClick={() => setWinByTwo((v) => !v)}
-                  className={`w-full h-10 rounded-xl text-xs font-bold border-2 px-3 ${
-                    winByTwo
+                  className={`w-full h-10 rounded-xl text-xs font-bold border-2 px-3 ${winByTwo
                       ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
                       : 'border-slate-200 dark:border-slate-700 text-slate-500'
-                  }`}
+                    }`}
                 >
                   Vai a 2: {winByTwo ? 'Sim' : 'Não'}
                 </button>
@@ -285,11 +280,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
             <button
               type="button"
               onClick={() => setFormat('bracket')}
-              className={`p-4 rounded-2xl border-2 text-left transition flex items-start gap-3 ${
-                format === 'bracket'
+              className={`p-4 rounded-2xl border-2 text-left transition flex items-start gap-3 ${format === 'bracket'
                   ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
                   : 'border-slate-200 dark:border-slate-800'
-              }`}
+                }`}
             >
               <div className="w-10 h-10 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0">
                 <GitFork className="w-5 h-5" />
@@ -307,11 +301,10 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
             <button
               type="button"
               onClick={() => setFormat('king_of_court')}
-              className={`p-4 rounded-2xl border-2 text-left transition flex items-start gap-3 ${
-                format === 'king_of_court'
+              className={`p-4 rounded-2xl border-2 text-left transition flex items-start gap-3 ${format === 'king_of_court'
                   ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40'
                   : 'border-slate-200 dark:border-slate-800'
-              }`}
+                }`}
             >
               <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0">
                 <Crown className="w-5 h-5" />
@@ -340,16 +333,15 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {[4, 5, 6, 8, 10, 12, 16].map((n) => (
+            {[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 16].map((n) => (
               <button
                 key={n}
                 type="button"
                 onClick={() => setTargetTeamsCount(n)}
-                className={`h-11 px-4 rounded-xl font-extrabold text-sm border-2 transition ${
-                  targetTeamsCount === n
+                className={`h-11 px-4 rounded-xl font-extrabold text-sm border-2 transition ${targetTeamsCount === n
                     ? 'border-emerald-500 bg-emerald-500 text-slate-950'
                     : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                }`}
+                  }`}
               >
                 {n}
               </button>
@@ -403,13 +395,12 @@ export function SetupScreen({ onCreate }: SetupScreenProps) {
               value={pin}
               onChange={(e) => handlePinChange(e.target.value)}
               placeholder="Ex: 1234 (somente números)"
-              className={`w-full h-14 pl-4 pr-12 rounded-2xl bg-amber-50/60 dark:bg-slate-800 border-2 outline-none text-lg font-extrabold tracking-widest text-slate-900 dark:text-white ${
-                pinError
+              className={`w-full h-14 pl-4 pr-12 rounded-2xl bg-amber-50/60 dark:bg-slate-800 border-2 outline-none text-lg font-extrabold tracking-widest text-slate-900 dark:text-white ${pinError
                   ? 'border-rose-500 focus:border-rose-500'
                   : isValidNumericPin(pin)
                     ? 'border-emerald-500 focus:border-emerald-500'
                     : 'border-amber-200 dark:border-slate-700 focus:border-emerald-500'
-              }`}
+                }`}
             />
             <button
               type="button"

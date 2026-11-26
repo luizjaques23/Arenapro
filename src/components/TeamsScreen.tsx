@@ -324,8 +324,11 @@ export function TeamsScreen({
                     type="button"
                     onClick={() => setColor(c)}
                     aria-label={`Cor ${c}`}
-                    className={`w-8 h-8 rounded-full border-2 transition ${color === c ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
-                      }`}
+                    className={`w-8 h-8 rounded-full border-2 transition ${
+                      color === c
+                        ? 'border-slate-900 dark:border-white scale-110'
+                        : 'border-transparent'
+                    }`}
                     style={{ backgroundColor: c }}
                   />
                 ))}

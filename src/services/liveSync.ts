@@ -43,27 +43,14 @@ export function encodeSnapshot(tournament: Tournament): string {
   }
 }
 
-export function decodeSnapshotFromHash(rawHash?: string): Tournament | null {
+export function decodeCompressedSnapshot(raw: string): Tournament | null {
+  if (!raw) return null;
   try {
-    let raw = '';
-    const hash = rawHash ?? (typeof window !== 'undefined' ? window.location.hash : '');
-    if (hash) {
-      const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
-      raw = hashParams.get('d') || hashParams.get('s') || '';
-    }
-    if (!raw && typeof window !== 'undefined') {
-      const searchParams = new URLSearchParams(window.location.search);
-      raw = searchParams.get('d') || searchParams.get('s') || '';
-    }
-    if (!raw) return null;
-
-    // First attempt: lz-string
     const decompressed = LZString.decompressFromEncodedURIComponent(raw);
     if (decompressed) {
       return JSON.parse(decompressed) as Tournament;
     }
 
-    // Fallback: standard base64 if created by an older version
     const base64 = raw.replace(/-/g, '+').replace(/_/g, '/');
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -77,12 +64,33 @@ export function decodeSnapshotFromHash(rawHash?: string): Tournament | null {
   }
 }
 
+export function decodeSnapshotFromHash(rawHash?: string): Tournament | null {
+  try {
+    let raw = '';
+    const hash = rawHash ?? (typeof window !== 'undefined' ? window.location.hash : '');
+    if (hash) {
+      const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+      raw = hashParams.get('d') || hashParams.get('s') || '';
+    }
+    if (!raw && typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      raw = searchParams.get('d') || searchParams.get('s') || '';
+    }
+    if (!raw) return null;
+    return decodeCompressedSnapshot(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function buildPublicWatchUrl(tournament: Tournament, baseOrigin?: string): string {
   const origin =
     baseOrigin ??
     (typeof window !== 'undefined' ? window.location.href : 'https://arenapro.local/');
   const url = new URL(origin);
-  url.pathname = '/';
+  // Preserve deployment base pathname (e.g., /Arenapro/ on GitHub Pages) while stripping /acompanhar/:id
+  const cleanedPath = url.pathname.replace(/\/acompanhar\/[^/]+\/?$/, '/');
+  url.pathname = cleanedPath || '/';
   url.search = '';
   url.hash = '';
   url.searchParams.set('torneio', tournament.id);
@@ -98,7 +106,6 @@ export function buildPublicWatchUrl(tournament: Tournament, baseOrigin?: string)
 }
 
 function getRelayTopic(tournamentId: string): string {
-  // Safe topic name containing only alphanumeric and underscores
   const safeId = tournamentId.replace(/[^a-zA-Z0-9_-]/g, '_');
   return `arenapro_t_${safeId}`;
 }
@@ -118,16 +125,18 @@ export async function publishTournamentLive(tournament: Tournament): Promise<voi
       ch.postMessage({ type: 'TOURNAMENT_SYNC', tournament: updatedTournament });
       ch.close();
     } catch {
-      // Ignore
+      // Ignore BroadcastChannel errors
     }
   }
 
-  // 2. Publish to free zero-config serverless relay for cross-device live updates
+  // 2. Publish compressed snapshot to free zero-config serverless relay (stays <4KB for all sizes)
   try {
     const topic = getRelayTopic(tournament.id);
+    const compressed = encodeSnapshot(updatedTournament);
+    if (!compressed) return;
     const payload = JSON.stringify({
-      tournament: updatedTournament,
-      timestamp: Date.now(),
+      z: compressed,
+      ts: updatedTournament.updatedAt ?? Date.now(),
     });
 
     await fetch(`${RELAY_BASE_URL}/${topic}`, {
@@ -155,7 +164,22 @@ export function readPublicTournamentFromStorage(
   const found = list.find((t) => t.id === tournamentId);
   if (!found) return null;
   if (token && found.publicToken && found.publicToken !== token) return null;
-  return found;
+  return stripSensitiveFields(found);
+}
+
+function extractRelayTournament(rawEventData: string): Tournament | null {
+  try {
+    const parsed = JSON.parse(rawEventData);
+    const rawMessage = parsed?.message;
+    if (!rawMessage) return null;
+    const msg = typeof rawMessage === 'string' ? JSON.parse(rawMessage) : rawMessage;
+    if (msg && typeof msg.z === 'string') {
+      return decodeCompressedSnapshot(msg.z);
+    }
+    return (msg?.tournament ?? msg) as Tournament;
+  } catch {
+    return null;
+  }
 }
 
 export function subscribePublicTournament(
@@ -164,56 +188,61 @@ export function subscribePublicTournament(
   onUpdate: (tournament: Tournament | null) => void,
 ): () => void {
   let cancelled = false;
+  let bestTournament: Tournament | null = null;
 
   const validateTournament = (t: Tournament | null): Tournament | null => {
-    if (!t) return null;
+    if (!t || typeof t !== 'object') return null;
     if (t.id !== tournamentId) return null;
     if (token && t.publicToken && t.publicToken !== token) return null;
-    return t;
+    return stripSensitiveFields(t);
   };
 
-  // 1. Check local storage first
-  const local = readPublicTournamentFromStorage(tournamentId, token);
-  if (local) {
-    onUpdate(local);
-  }
+  const applyCandidate = (candidate: Tournament | null) => {
+    const valid = validateTournament(candidate);
+    if (!valid || cancelled) return false;
 
-  // 2. Check snapshot from URL hash
-  const fromHash = decodeSnapshotFromHash();
-  const validHash = validateTournament(fromHash);
-  if (validHash) {
-    onUpdate(validHash);
-  }
+    if (
+      !bestTournament ||
+      (valid.updatedAt ?? 0) >= (bestTournament.updatedAt ?? 0) ||
+      (valid.status === 'finished' && bestTournament.status !== 'finished')
+    ) {
+      bestTournament = valid;
+      onUpdate(valid);
+      return true;
+    }
+    return false;
+  };
+
+  // 1. Check snapshot from URL hash first for instant zero-latency load
+  applyCandidate(decodeSnapshotFromHash());
+
+  // 2. Check local storage (overrides hash if local state is newer)
+  applyCandidate(readPublicTournamentFromStorage(tournamentId, token));
 
   // 3. Connect to free serverless relay for cross-device live updates
   const topic = getRelayTopic(tournamentId);
 
-  // Fast initial fetch from relay to ensure latest state is fetched immediately
   const pollRelay = async () => {
     try {
       const res = await fetch(`${RELAY_BASE_URL}/${topic}/json?poll=1`, {
         cache: 'no-store',
       });
-      if (cancelled || !res.ok) return;
-      const text = await res.text();
-      // ntfy can return multiple JSON lines if multiple messages exist
-      const lines = text.trim().split('\n').filter(Boolean);
-      for (let i = lines.length - 1; i >= 0; i -= 1) {
-        try {
-          const parsed = JSON.parse(lines[i]);
-          const rawMessage = parsed.message;
-          const msg = typeof rawMessage === 'string' ? JSON.parse(rawMessage) : rawMessage;
-          const remoteTournament = validateTournament(msg?.tournament ?? msg);
-          if (remoteTournament) {
-            onUpdate(remoteTournament);
+      if (cancelled) return;
+      if (res.ok) {
+        const text = await res.text();
+        const lines = text.trim().split('\n').filter(Boolean);
+        for (let i = lines.length - 1; i >= 0; i -= 1) {
+          const remoteTournament = extractRelayTournament(lines[i]);
+          if (applyCandidate(remoteTournament)) {
             return;
           }
-        } catch {
-          // Continue to next line
         }
       }
     } catch {
       // Offline fallback
+    }
+    if (!cancelled && !bestTournament) {
+      onUpdate(null);
     }
   };
 
@@ -226,25 +255,15 @@ export function subscribePublicTournament(
       eventSource = new EventSource(`${RELAY_BASE_URL}/${topic}/sse`);
       eventSource.onmessage = (event) => {
         if (cancelled) return;
-        try {
-          const parsed = JSON.parse(event.data);
-          const rawMessage = parsed.message;
-          if (!rawMessage) return;
-          const msg = typeof rawMessage === 'string' ? JSON.parse(rawMessage) : rawMessage;
-          const remoteTournament = validateTournament(msg?.tournament ?? msg);
-          if (remoteTournament) {
-            onUpdate(remoteTournament);
-          }
-        } catch {
-          // Ignore invalid message
-        }
+        const remoteTournament = extractRelayTournament(event.data);
+        applyCandidate(remoteTournament);
       };
     } catch {
       eventSource = null;
     }
   }
 
-  // 5. BroadcastChannel for same-device/same-browser multi-window testing
+  // 5. BroadcastChannel & storage event for same-device/same-browser multi-window sync
   let ch: BroadcastChannel | null = null;
   if (typeof BroadcastChannel !== 'undefined') {
     try {
@@ -253,8 +272,7 @@ export function subscribePublicTournament(
         if (cancelled) return;
         const data = event.data as { type?: string; tournament?: Tournament } | undefined;
         if (data?.type === 'TOURNAMENT_SYNC') {
-          const valid = validateTournament(data.tournament ?? null);
-          if (valid) onUpdate(valid);
+          applyCandidate(data.tournament ?? null);
         }
       };
     } catch {
@@ -262,16 +280,30 @@ export function subscribePublicTournament(
     }
   }
 
-  // Periodic lightweight check every 8 seconds as safety net
-  const pollTimer = window.setInterval(() => {
-    if (!cancelled) {
-      void pollRelay();
-    }
-  }, 8000);
+  const handleStorage = () => {
+    if (cancelled) return;
+    applyCandidate(readPublicTournamentFromStorage(tournamentId, token));
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', handleStorage);
+  }
+
+  // Periodic lightweight check every 6 seconds as safety net
+  const pollTimer =
+    typeof window !== 'undefined'
+      ? window.setInterval(() => {
+          if (!cancelled) {
+            void pollRelay();
+          }
+        }, 6000)
+      : undefined;
 
   return () => {
     cancelled = true;
-    window.clearInterval(pollTimer);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', handleStorage);
+      if (pollTimer !== undefined) window.clearInterval(pollTimer);
+    }
     if (eventSource) eventSource.close();
     if (ch) ch.close();
   };

@@ -187,7 +187,7 @@ describe('Official 16-Participant / 30-Match Hybrid Bracket Specification', () =
 describe('Bracket tournament engine across team counts (2 to 18 teams)', () => {
   const sport = SPORT_PRESETS[0].defaultConfig;
 
-  for (const count of [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18]) {
+  for (const count of [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18]) {
     for (const order of ['chronological', 'winners_first', 'losers_first'] as const) {
       it(`completes cleanly without deadlocks for ${count} teams (${order})`, () => {
         const base = createTournament({

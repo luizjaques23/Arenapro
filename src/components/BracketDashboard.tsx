@@ -536,7 +536,11 @@ export function BracketDashboard({
                 <section key={blockNum} className="space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-slate-900 dark:bg-slate-800 text-white">
-                      {BLOCK_TITLES[blockNum] ?? `Bloco ${blockNum}`}
+                      {bracket.bracketSize === 16 && BLOCK_TITLES[blockNum]
+                        ? BLOCK_TITLES[blockNum]
+                        : `Bloco ${blockNum} — ${Array.from(
+                            new Set(matches.map((m) => m.stageLabel).filter(Boolean)),
+                          ).join(' + ')}`}
                     </span>
                     <span className="text-xs font-bold text-slate-500">
                       {matches.filter((m) => m.status === 'finished').length}/{matches.length}{' '}

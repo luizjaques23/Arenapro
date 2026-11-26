@@ -1637,6 +1637,207 @@ const HYBRID_12_SPECS: HybridNodeSpec[] = [
   },
 ];
 
+/**
+ * Compact definition used to declare the odd-sized hybrid graphs (7, 9, 11, 13).
+ * Sources: a number = 0-based entry index (team enters directly in this match),
+ * `V{n}` = winner of match n, `P{n}` = loser of match n.
+ * Routing (nextWinner/nextLoser) and all labels are derived automatically,
+ * which guarantees every outcome has exactly one destination (no orphans).
+ */
+type CompactSource = number | `V${number}` | `P${number}`;
+
+interface CompactHybridDef {
+  n: number;
+  side: 'winners' | 'losers' | 'finals';
+  round: number;
+  roundName: string;
+  stage: string;
+  block: number;
+  a: CompactSource;
+  b: CompactSource;
+  place?: 'final' | 'third';
+}
+
+function buildCompactHybridSpecs(defs: CompactHybridDef[]): HybridNodeSpec[] {
+  const byNumber = new Map(defs.map((d) => [d.n, d]));
+  const winnerDest = new Map<number, { match: number; slot: 'A' | 'B' }>();
+  const loserDest = new Map<number, { match: number; slot: 'A' | 'B' }>();
+
+  for (const d of defs) {
+    (['a', 'b'] as const).forEach((key) => {
+      const src = d[key];
+      if (typeof src === 'number') return;
+      const from = Number(src.slice(1));
+      const target = src.startsWith('V') ? winnerDest : loserDest;
+      if (target.has(from)) {
+        throw new Error(`Hybrid spec: outcome ${src} routed twice`);
+      }
+      target.set(from, { match: d.n, slot: key === 'a' ? 'A' : 'B' });
+    });
+  }
+
+  const labelOf = (src: CompactSource) =>
+    typeof src === 'number' ? `Entrada ${src + 1}` : src;
+  const destText = (prefix: string, n: number, dest: { match: number }) => {
+    const target = byNumber.get(dest.match);
+    const suffix =
+      target?.side === 'losers'
+        ? ' (Repescagem)'
+        : target?.side === 'finals'
+          ? ` (${target.stage})`
+          : '';
+    return `${prefix}${n} → Jogo ${dest.match}${suffix}`;
+  };
+
+  return defs.map((d) => {
+    const w = winnerDest.get(d.n);
+    const l = loserDest.get(d.n);
+    let destWinnerLabel = w ? destText('V', d.n, w) : '';
+    let destLoserLabel = l ? destText('P', d.n, l) : 'Eliminado';
+    if (d.place === 'final') {
+      destWinnerLabel = 'Campeão (1º)';
+      destLoserLabel = 'Vice (2º)';
+    } else if (d.place === 'third') {
+      destWinnerLabel = '3º Lugar';
+      destLoserLabel = '4º Lugar';
+    }
+
+    return {
+      matchNumber: d.n,
+      side: d.side,
+      roundIndex: d.round,
+      roundName: d.roundName,
+      stageLabel: d.stage,
+      blockNumber: d.block,
+      entryAIndex: typeof d.a === 'number' ? d.a : undefined,
+      entryBIndex: typeof d.b === 'number' ? d.b : undefined,
+      slotALabel: labelOf(d.a),
+      slotBLabel: labelOf(d.b),
+      destWinnerLabel,
+      destLoserLabel,
+      nextWinnerMatchNumber: w?.match,
+      nextWinnerSlot: w?.slot,
+      nextLoserMatchNumber: l?.match,
+      nextLoserSlot: l?.slot,
+      placementOnWin: d.place === 'final' ? 1 : d.place === 'third' ? 3 : undefined,
+      placementOnLoss: d.place === 'final' ? 2 : d.place === 'third' ? 4 : undefined,
+    };
+  });
+}
+
+const W = 'winners' as const;
+const L = 'losers' as const;
+const F = 'finals' as const;
+
+function finalFour(
+  first: number,
+  block: number,
+  semiA: [CompactSource, CompactSource],
+  semiB: [CompactSource, CompactSource],
+): CompactHybridDef[] {
+  const sA = first;
+  const sB = first + 1;
+  return [
+    { n: sA, side: F, round: 0, roundName: 'Semifinais', stage: 'Semifinal A', block, a: semiA[0], b: semiA[1] },
+    { n: sB, side: F, round: 0, roundName: 'Semifinais', stage: 'Semifinal B', block, a: semiB[0], b: semiB[1] },
+    { n: first + 2, side: F, round: 1, roundName: 'Finais (1º ao 4º)', stage: 'Disputa de 3º/4º', block: block + 1, a: `P${sA}`, b: `P${sB}`, place: 'third' },
+    { n: first + 3, side: F, round: 1, roundName: 'Finais (1º ao 4º)', stage: 'Final (1º/2º)', block: block + 1, a: `V${sA}`, b: `V${sB}`, place: 'final' },
+  ];
+}
+
+/**
+ * 7 duplas — 12 jogos (2N-2), 1 única folga na abertura (Entrada 7 estreia na Rodada 2).
+ * Vencedores: 3 jogos R1 + 2 jogos R2 → 2 invictos. Repescagem: P2xP1, depois cruzamento
+ * (V6xP5 / P3xP4) evitando revanche imediata. Semis cruzadas: V4xV7 e V5xV8.
+ */
+const HYBRID_7_SPECS: HybridNodeSpec[] = buildCompactHybridSpecs([
+  { n: 1, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 0, b: 1 },
+  { n: 2, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 2, b: 3 },
+  { n: 3, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 4, b: 5 },
+  { n: 4, side: W, round: 1, roundName: 'Classificatórios', stage: 'Classificatório A', block: 2, a: 'V1', b: 'V2' },
+  { n: 5, side: W, round: 1, roundName: 'Classificatórios', stage: 'Classificatório B', block: 2, a: 'V3', b: 6 },
+  { n: 6, side: L, round: 0, roundName: 'Repescagem R1', stage: 'Repescagem R1', block: 2, a: 'P2', b: 'P1' },
+  { n: 7, side: L, round: 1, roundName: 'Classif. Repescagem', stage: 'Classif. Repescagem A', block: 3, a: 'V6', b: 'P5' },
+  { n: 8, side: L, round: 1, roundName: 'Classif. Repescagem', stage: 'Classif. Repescagem B', block: 3, a: 'P3', b: 'P4' },
+  ...finalFour(9, 4, ['V4', 'V7'], ['V5', 'V8']),
+]);
+
+/**
+ * 9 duplas — 16 jogos, 1 folga na abertura (Entrada 9 estreia na Rodada 2).
+ * Vencedores: 4 R1 + 2 R2 + 1 classificatório → 2 invictos (V6 e V7).
+ * Repescagem: P4xP3 / P2xP1 (ordem invertida), cruzamento com P5/P6 e P7 → 2 sobreviventes.
+ */
+const HYBRID_9_SPECS: HybridNodeSpec[] = buildCompactHybridSpecs([
+  { n: 1, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 0, b: 1 },
+  { n: 2, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 2, b: 3 },
+  { n: 3, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 4, b: 5 },
+  { n: 4, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 6, b: 7 },
+  { n: 5, side: W, round: 1, roundName: 'Rodada 2', stage: 'Rodada 2', block: 2, a: 'V1', b: 'V2' },
+  { n: 6, side: W, round: 1, roundName: 'Rodada 2', stage: 'Classificatório B', block: 2, a: 'V3', b: 8 },
+  { n: 7, side: W, round: 2, roundName: 'Classificatório', stage: 'Classificatório A', block: 3, a: 'V4', b: 'V5' },
+  { n: 8, side: L, round: 0, roundName: 'Repescagem R1', stage: 'Repescagem R1', block: 2, a: 'P4', b: 'P3' },
+  { n: 9, side: L, round: 0, roundName: 'Repescagem R1', stage: 'Repescagem R1', block: 2, a: 'P2', b: 'P1' },
+  { n: 10, side: L, round: 1, roundName: 'Repescagem R2', stage: 'Repescagem R2', block: 3, a: 'V8', b: 'P5' },
+  { n: 11, side: L, round: 1, roundName: 'Repescagem R2', stage: 'Repescagem R2', block: 3, a: 'V9', b: 'P6' },
+  { n: 12, side: L, round: 2, roundName: 'Classif. Repescagem', stage: 'Classif. Repescagem B', block: 4, a: 'V11', b: 'P7' },
+  ...finalFour(13, 5, ['V7', 'V10'], ['V6', 'V12']),
+]);
+
+/**
+ * 11 duplas — 20 jogos, 1 folga na abertura (Entrada 11 estreia na Rodada 2).
+ * Vencedores: 5 R1 + 3 R2 + 1 classificatório → 2 invictos (V6 e V9).
+ * Repescagem: P5xP4 / P3xP2, P1 entra na R2 contra P7; cruzamentos evitam revanche imediata.
+ */
+const HYBRID_11_SPECS: HybridNodeSpec[] = buildCompactHybridSpecs([
+  { n: 1, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 0, b: 1 },
+  { n: 2, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 2, b: 3 },
+  { n: 3, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 4, b: 5 },
+  { n: 4, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 6, b: 7 },
+  { n: 5, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 8, b: 9 },
+  { n: 6, side: W, round: 1, roundName: 'Rodada 2', stage: 'Classificatório A', block: 2, a: 'V1', b: 'V2' },
+  { n: 7, side: W, round: 1, roundName: 'Rodada 2', stage: 'Rodada 2', block: 2, a: 'V3', b: 'V4' },
+  { n: 8, side: W, round: 1, roundName: 'Rodada 2', stage: 'Rodada 2', block: 2, a: 'V5', b: 10 },
+  { n: 9, side: W, round: 2, roundName: 'Classificatório', stage: 'Classificatório B', block: 3, a: 'V7', b: 'V8' },
+  { n: 10, side: L, round: 0, roundName: 'Repescagem R1', stage: 'Repescagem R1', block: 2, a: 'P5', b: 'P4' },
+  { n: 11, side: L, round: 0, roundName: 'Repescagem R1', stage: 'Repescagem R1', block: 2, a: 'P3', b: 'P2' },
+  { n: 12, side: L, round: 1, roundName: 'Repescagem R2', stage: 'Repescagem R2', block: 3, a: 'V10', b: 'P6' },
+  { n: 13, side: L, round: 1, roundName: 'Repescagem R2', stage: 'Repescagem R2', block: 3, a: 'V11', b: 'P8' },
+  { n: 14, side: L, round: 1, roundName: 'Repescagem R2', stage: 'Repescagem R2', block: 3, a: 'P1', b: 'P7' },
+  { n: 15, side: L, round: 2, roundName: 'Classif. Repescagem', stage: 'Classif. Repescagem A', block: 4, a: 'P9', b: 'V12' },
+  { n: 16, side: L, round: 2, roundName: 'Classif. Repescagem', stage: 'Classif. Repescagem B', block: 4, a: 'V13', b: 'V14' },
+  ...finalFour(17, 5, ['V6', 'V15'], ['V9', 'V16']),
+]);
+
+/**
+ * 13 duplas — 24 jogos, 1 folga na abertura (Entrada 13 estreia na Rodada 2).
+ * Vencedores: 6 R1 + 3 R2 + 2 classificatórios → 2 invictos (V10 e V11).
+ * Repescagem: P6xP5 / P4xP3 / P2xP1, cruzamento rotativo com P7..P9, e P10/P11
+ * cruzam de lado (como P21/P22 no formato de 16) para evitar revanche nas semifinais.
+ */
+const HYBRID_13_SPECS: HybridNodeSpec[] = buildCompactHybridSpecs([
+  { n: 1, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 0, b: 1 },
+  { n: 2, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 2, b: 3 },
+  { n: 3, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 4, b: 5 },
+  { n: 4, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 6, b: 7 },
+  { n: 5, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 8, b: 9 },
+  { n: 6, side: W, round: 0, roundName: 'Rodada 1', stage: 'Rodada 1', block: 1, a: 10, b: 11 },
+  { n: 7, side: W, round: 1, roundName: 'Rodada 2', stage: 'Rodada 2', block: 2, a: 'V1', b: 'V2' },
+  { n: 8, side: W, round: 1, roundName: 'Rodada 2', stage: 'Rodada 2', block: 2, a: 'V3', b: 'V4' },
+  { n: 9, side: W, round: 1, roundName: 'Rodada 2', stage: 'Rodada 2', block: 2, a: 'V5', b: 12 },
+  { n: 10, side: W, round: 2, roundName: 'Classificatórios', stage: 'Classificatório A', block: 3, a: 'V7', b: 'V8' },
+  { n: 11, side: W, round: 2, roundName: 'Classificatórios', stage: 'Classificatório B', block: 3, a: 'V6', b: 'V9' },
+  { n: 12, side: L, round: 0, roundName: 'Repescagem R1', stage: 'Repescagem R1', block: 2, a: 'P6', b: 'P5' },
+  { n: 13, side: L, round: 0, roundName: 'Repescagem R1', stage: 'Repescagem R1', block: 2, a: 'P4', b: 'P3' },
+  { n: 14, side: L, round: 0, roundName: 'Repescagem R1', stage: 'Repescagem R1', block: 2, a: 'P2', b: 'P1' },
+  { n: 15, side: L, round: 1, roundName: 'Repescagem R2', stage: 'Repescagem R2', block: 3, a: 'V12', b: 'P7' },
+  { n: 16, side: L, round: 1, roundName: 'Repescagem R2', stage: 'Repescagem R2', block: 3, a: 'V13', b: 'P9' },
+  { n: 17, side: L, round: 1, roundName: 'Repescagem R2', stage: 'Repescagem R2', block: 3, a: 'V14', b: 'P8' },
+  { n: 18, side: L, round: 2, roundName: 'Repescagem R3', stage: 'Repescagem R3', block: 4, a: 'V15', b: 'V16' },
+  { n: 19, side: L, round: 3, roundName: 'Classif. Repescagem', stage: 'Classif. Repescagem A', block: 5, a: 'P10', b: 'V18' },
+  { n: 20, side: L, round: 3, roundName: 'Classif. Repescagem', stage: 'Classif. Repescagem B', block: 5, a: 'P11', b: 'V17' },
+  ...finalFour(21, 6, ['V10', 'V20'], ['V11', 'V19']),
+]);
+
 function buildEntrySlots(teamIds: string[], size: number): Array<string | 'BYE'> {
   if (teamIds.length === size) {
     return [...teamIds];
@@ -2040,8 +2241,12 @@ export function startTournament(
     4: HYBRID_4_SPECS,
     5: HYBRID_5_SPECS,
     6: HYBRID_6_SPECS,
+    7: HYBRID_7_SPECS,
     8: HYBRID_8_SPECS,
+    9: HYBRID_9_SPECS,
+    11: HYBRID_11_SPECS,
     12: HYBRID_12_SPECS,
+    13: HYBRID_13_SPECS,
     16: HYBRID_16_SPECS,
   };
   const exactSpecs = hybridMap[teamIds.length];
