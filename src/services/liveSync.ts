@@ -43,8 +43,8 @@ function normalizeTournamentData(raw: Tournament | null | undefined): Tournament
   const normalizeMatches = (
     matches:
       | (Tournament['bracket'] extends undefined
-          ? never
-          : NonNullable<Tournament['bracket']>['winnersRounds'][number]['matches'])
+        ? never
+        : NonNullable<Tournament['bracket']>['winnersRounds'][number]['matches'])
       | undefined,
   ) =>
     (Array.isArray(matches) ? matches : []).map((m) => ({
@@ -77,33 +77,33 @@ function normalizeTournamentData(raw: Tournament | null | undefined): Tournament
     })),
     bracket: raw.bracket
       ? {
-          ...raw.bracket,
-          winnersRounds: normalizeRounds(raw.bracket.winnersRounds),
-          losersRounds: normalizeRounds(raw.bracket.losersRounds),
-          finalsRounds: normalizeRounds(raw.bracket.finalsRounds),
-          losersAdvancingPool: Array.isArray(raw.bracket.losersAdvancingPool)
-            ? raw.bracket.losersAdvancingPool
-            : [],
-          losersStagingPool: Array.isArray(raw.bracket.losersStagingPool)
-            ? raw.bracket.losersStagingPool
-            : [],
-          byeHistoryTeamIds: Array.isArray(raw.bracket.byeHistoryTeamIds)
-            ? raw.bracket.byeHistoryTeamIds
-            : [],
-          eliminated: Array.isArray(raw.bracket.eliminated) ? raw.bracket.eliminated : [],
-        }
+        ...raw.bracket,
+        winnersRounds: normalizeRounds(raw.bracket.winnersRounds),
+        losersRounds: normalizeRounds(raw.bracket.losersRounds),
+        finalsRounds: normalizeRounds(raw.bracket.finalsRounds),
+        losersAdvancingPool: Array.isArray(raw.bracket.losersAdvancingPool)
+          ? raw.bracket.losersAdvancingPool
+          : [],
+        losersStagingPool: Array.isArray(raw.bracket.losersStagingPool)
+          ? raw.bracket.losersStagingPool
+          : [],
+        byeHistoryTeamIds: Array.isArray(raw.bracket.byeHistoryTeamIds)
+          ? raw.bracket.byeHistoryTeamIds
+          : [],
+        eliminated: Array.isArray(raw.bracket.eliminated) ? raw.bracket.eliminated : [],
+      }
       : undefined,
     kingOfCourt: raw.kingOfCourt
       ? {
-          ...raw.kingOfCourt,
-          courtTeamAId: raw.kingOfCourt.courtTeamAId ?? null,
-          courtTeamBId: raw.kingOfCourt.courtTeamBId ?? null,
-          currentMatchId: raw.kingOfCourt.currentMatchId ?? null,
-          currentKingTeamId: raw.kingOfCourt.currentKingTeamId ?? null,
-          queue: Array.isArray(raw.kingOfCourt.queue) ? raw.kingOfCourt.queue : [],
-          matches: normalizeMatches(raw.kingOfCourt.matches),
-          bestStreakByTeam: raw.kingOfCourt.bestStreakByTeam ?? {},
-        }
+        ...raw.kingOfCourt,
+        courtTeamAId: raw.kingOfCourt.courtTeamAId ?? null,
+        courtTeamBId: raw.kingOfCourt.courtTeamBId ?? null,
+        currentMatchId: raw.kingOfCourt.currentMatchId ?? null,
+        currentKingTeamId: raw.kingOfCourt.currentKingTeamId ?? null,
+        queue: Array.isArray(raw.kingOfCourt.queue) ? raw.kingOfCourt.queue : [],
+        matches: normalizeMatches(raw.kingOfCourt.matches),
+        bestStreakByTeam: raw.kingOfCourt.bestStreakByTeam ?? {},
+      }
       : undefined,
   };
 
@@ -487,12 +487,12 @@ export function subscribePublicTournament(
   const pollTimer =
     typeof window !== 'undefined'
       ? window.setInterval(() => {
-          if (!cancelled) {
-            void pollSupabase();
-            void pollFirebase();
-            void pollRelay();
-          }
-        }, 5000)
+        if (!cancelled) {
+          void pollSupabase();
+          void pollFirebase();
+          void pollRelay();
+        }
+      }, 5000)
       : undefined;
 
   return () => {

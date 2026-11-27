@@ -134,11 +134,10 @@ function MatchCard({
       type="button"
       onClick={() => isReadyToPlay && onSelectMatch(match)}
       disabled={!isReadyToPlay}
-      className={`w-full text-left rounded-2xl border-2 ${borderAccent} bg-white/95 dark:bg-slate-900/95 p-3.5 shadow-sm transition ${
-        isReadyToPlay
+      className={`w-full text-left rounded-2xl border-2 ${borderAccent} bg-white/95 dark:bg-slate-900/95 p-3.5 shadow-sm transition ${isReadyToPlay
           ? 'hover:border-slate-900 dark:hover:border-white active:scale-[0.98] cursor-pointer'
           : 'opacity-90 cursor-default'
-      }`}
+        }`}
     >
       <div className="flex items-center justify-between gap-2 text-[11px] font-bold mb-2">
         <span className="text-slate-500 dark:text-slate-400 truncate">
@@ -151,11 +150,10 @@ function MatchCard({
           </span>
         ) : isReadyToPlay ? (
           <span
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full shrink-0 ${
-              match.status === 'live'
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full shrink-0 ${match.status === 'live'
                 ? 'bg-rose-500 text-white animate-pulse'
                 : 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950'
-            }`}
+              }`}
           >
             <Play className="w-3 h-3 fill-current" />
             {isFutevolei
@@ -180,13 +178,12 @@ function MatchCard({
           return (
             <div
               key={idx}
-              className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl ${
-                isWinner
+              className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl ${isWinner
                   ? 'bg-emerald-50 dark:bg-emerald-950/50 font-extrabold'
                   : row.team
                     ? 'bg-slate-50 dark:bg-slate-800/60 font-semibold'
                     : 'bg-slate-50/70 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-700/70 font-semibold'
-              }`}
+                }`}
             >
               <div className="flex items-center gap-2 min-w-0">
                 {row.team ? (
@@ -298,9 +295,8 @@ function BracketSection({
         </div>
       ) : (
         <div
-          className={`flex gap-4 overflow-x-auto pb-3 snap-x ${
-            reverseColumnsOnDesktop ? 'lg:flex-row-reverse' : ''
-          }`}
+          className={`flex gap-4 overflow-x-auto pb-3 snap-x ${reverseColumnsOnDesktop ? 'lg:flex-row-reverse' : ''
+            }`}
         >
           {rounds.map((round) => (
             <div
@@ -542,11 +538,10 @@ export function BracketDashboard({
                 key={tab.id}
                 type="button"
                 onClick={() => setFilter(tab.id as typeof filter)}
-                className={`h-10 px-4 rounded-xl text-xs font-extrabold whitespace-nowrap flex items-center gap-1.5 transition ${
-                  filter === tab.id
+                className={`h-10 px-4 rounded-xl text-xs font-extrabold whitespace-nowrap flex items-center gap-1.5 transition ${filter === tab.id
                     ? 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950'
                     : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
-                }`}
+                  }`}
               >
                 {tab.id === 'blocks' && <ListOrdered className="w-3.5 h-3.5" />}
                 {tab.label}
@@ -563,8 +558,8 @@ export function BracketDashboard({
                       {bracket.bracketSize === 16 && BLOCK_TITLES[blockNum]
                         ? BLOCK_TITLES[blockNum]
                         : `Bloco ${blockNum} — ${Array.from(
-                            new Set(matches.map((m) => m.stageLabel).filter(Boolean)),
-                          ).join(' + ')}`}
+                          new Set(matches.map((m) => m.stageLabel).filter(Boolean)),
+                        ).join(' + ')}`}
                     </span>
                     <span className="text-xs font-bold text-slate-500">
                       {matches.filter((m) => m.status === 'finished').length}/{matches.length}{' '}
@@ -661,9 +656,8 @@ export function BracketDashboard({
                   return (
                     <div
                       key={idx}
-                      className={`rounded-2xl p-4 bg-white/5 border ${
-                        isKing ? 'border-amber-400' : 'border-white/10'
-                      }`}
+                      className={`rounded-2xl p-4 bg-white/5 border ${isKing ? 'border-amber-400' : 'border-white/10'
+                        }`}
                     >
                       {!isFutevolei && <div className="text-3xl mb-1">{tm?.emblem ?? '⚽'}</div>}
                       <p className="font-extrabold text-base sm:text-lg truncate">
@@ -684,9 +678,8 @@ export function BracketDashboard({
                   return (
                     <div
                       key={idx}
-                      className={`rounded-2xl p-4 bg-white/5 border ${
-                        isKing ? 'border-amber-400' : 'border-white/10'
-                      }`}
+                      className={`rounded-2xl p-4 bg-white/5 border ${isKing ? 'border-amber-400' : 'border-white/10'
+                        }`}
                     >
                       {!isFutevolei && <div className="text-3xl mb-1">{tm?.emblem ?? '⚽'}</div>}
                       <p className="font-extrabold text-base sm:text-lg truncate">
