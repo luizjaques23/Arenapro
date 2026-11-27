@@ -20,15 +20,37 @@ export function isTournamentExpired(
   tournament: Tournament,
   now = Date.now(),
 ): boolean {
+  // Apenas torneios finalizados (Histórico) expiram automaticamente após 24 horas.
+  // Torneios em cadastro ou em andamento permanecem visíveis na listagem.
+  if (tournament.status !== 'finished') {
+    return false;
+  }
   const referenceTime =
-    tournament.status === 'finished'
-      ? (tournament.finishedAt ?? tournament.updatedAt ?? tournament.createdAt)
-      : (tournament.updatedAt ?? tournament.createdAt);
+    tournament.finishedAt ?? tournament.updatedAt ?? tournament.createdAt;
 
   if (typeof referenceTime !== 'number' || Number.isNaN(referenceTime)) {
     return false;
   }
   return now - referenceTime >= HISTORY_EXPIRATION_MS;
+}
+
+function normalizeLoadedTournament(raw: unknown): Tournament | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Partial<Tournament>;
+  if (!t.id || typeof t.id !== 'string') return null;
+
+  const now = Date.now();
+  return {
+    ...(t as Tournament),
+    name: typeof t.name === 'string' && t.name.trim() ? t.name : 'Torneio sem nome',
+    teams: Array.isArray(t.teams) ? t.teams : [],
+    status:
+      t.status === 'setup' || t.status === 'in_progress' || t.status === 'finished'
+        ? t.status
+        : 'setup',
+    createdAt: typeof t.createdAt === 'number' ? t.createdAt : now,
+    updatedAt: typeof t.updatedAt === 'number' ? t.updatedAt : now,
+  };
 }
 
 export function pruneExpiredTournaments(
@@ -56,7 +78,11 @@ export function loadTournaments(): Tournament[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
-    const { active, removedIds } = pruneExpiredTournaments(parsed as Tournament[]);
+    const normalized = parsed
+      .map(normalizeLoadedTournament)
+      .filter((t): t is Tournament => t !== null);
+
+    const { active, removedIds } = pruneExpiredTournaments(normalized);
     if (removedIds.length > 0) {
       for (const id of removedIds) {
         removeTournamentPinData(id);

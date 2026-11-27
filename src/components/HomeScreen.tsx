@@ -1,12 +1,16 @@
 import {
+  Check,
   ChevronRight,
   History,
   Lock,
   Plus,
+  Share2,
   Smartphone,
   Trophy,
 } from 'lucide-react';
+import { useState } from 'react';
 import { getSportDisplayName } from '../engine/sports';
+import { buildShareTournamentUrl, publishTournamentLive } from '../services/liveSync';
 import type { Tournament } from '../types/tournament';
 import { FutevoleiBall } from './FutevoleiBall';
 
@@ -18,6 +22,7 @@ interface HomeScreenProps {
   onNewTournament: () => void;
   onOpenTournament: (id: string) => void;
   onOpenHistory: () => void;
+  onOpenShareArea: () => void;
   showIosInstallHint: boolean;
 }
 
@@ -26,13 +31,36 @@ export function HomeScreen({
   onNewTournament,
   onOpenTournament,
   onOpenHistory,
+  onOpenShareArea,
   showIosInstallHint,
 }: HomeScreenProps) {
-  const activeTournaments = tournaments
-    .filter((t) => t.status !== 'finished')
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const [filter, setFilter] = useState<'all' | 'active' | 'finished'>('all');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const finishedCount = tournaments.filter((t) => t.status === 'finished').length;
+  const sortedTournaments = [...tournaments].sort(
+    (a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0),
+  );
+  const activeCount = sortedTournaments.filter((t) => t.status !== 'finished').length;
+  const finishedCount = sortedTournaments.filter((t) => t.status === 'finished').length;
+
+  const visibleTournaments = sortedTournaments.filter((t) => {
+    if (filter === 'active') return t.status !== 'finished';
+    if (filter === 'finished') return t.status === 'finished';
+    return true;
+  });
+
+  const handleQuickShare = async (e: React.MouseEvent, t: Tournament) => {
+    e.stopPropagation();
+    void publishTournamentLive(t);
+    const url = buildShareTournamentUrl(t);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(t.id);
+      window.setTimeout(() => setCopiedId((curr) => (curr === t.id ? null : curr)), 2200);
+    } catch {
+      onOpenShareArea();
+    }
+  };
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 space-y-6 pb-12">
@@ -63,6 +91,14 @@ export function HomeScreen({
             </button>
             <button
               type="button"
+              onClick={onOpenShareArea}
+              className="h-14 px-5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 border border-white/15 active:scale-[0.98] transition"
+            >
+              <Share2 className="w-5 h-5 text-emerald-400" />
+              Compartilhar
+            </button>
+            <button
+              type="button"
               onClick={onOpenHistory}
               className="h-14 px-5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 border border-white/15 active:scale-[0.98] transition"
             >
@@ -73,36 +109,88 @@ export function HomeScreen({
         </div>
       </section>
 
-      {/* Active / Saved Tournaments */}
+      {/* Created / Saved Tournaments Listing */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-            Torneios em Andamento ({activeTournaments.length})
+            Meus Torneios ({sortedTournaments.length})
           </h3>
+          {sortedTournaments.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              {[
+                { id: 'all', label: `Todos (${sortedTournaments.length})` },
+                { id: 'active', label: `Ativos (${activeCount})` },
+                { id: 'finished', label: `Finalizados (${finishedCount})` },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setFilter(tab.id as typeof filter)}
+                  className={`h-8 px-2.5 rounded-xl text-[11px] font-extrabold transition ${
+                    filter === tab.id
+                      ? 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950'
+                      : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {activeTournaments.length === 0 ? (
+        {sortedTournaments.length === 0 ? (
           <div className="rounded-3xl border-2 border-dashed border-amber-300/80 dark:border-slate-700 bg-white/70 dark:bg-slate-900/50 p-8 text-center space-y-2">
             <FutevoleiBall className="w-12 h-12 mx-auto opacity-80" />
             <p className="font-bold text-slate-800 dark:text-slate-200">
-              Nenhum torneio ativo no momento
+              Nenhum torneio criado ainda
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Toque em &ldquo;Novo Torneio&rdquo; para cadastrar as duplas e começar os jogos.
             </p>
           </div>
+        ) : visibleTournaments.length === 0 ? (
+          <div className="rounded-3xl border border-amber-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 p-7 text-center space-y-2">
+            <p className="font-bold text-sm text-slate-700 dark:text-slate-300">
+              {filter === 'active'
+                ? 'Nenhum torneio em andamento no momento'
+                : 'Nenhum torneio finalizado disponível'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setFilter('all')}
+              className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 hover:underline"
+            >
+              Ver todos os torneios ({sortedTournaments.length})
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
-            {activeTournaments.map((t) => {
+            {visibleTournaments.map((t) => {
               const sportName = getSportDisplayName(t.sport);
               const formatName =
                 t.format === 'king_of_court' ? 'Rei da Quadra' : 'Vencedores x Perdedores';
+              const statusLabel =
+                t.status === 'finished'
+                  ? 'Finalizado'
+                  : t.status === 'setup'
+                    ? 'Cadastro'
+                    : 'Em jogo';
+              const isCopied = copiedId === t.id;
+
               return (
-                <button
+                <div
                   key={t.id}
-                  type="button"
                   onClick={() => onOpenTournament(t.id)}
-                  className="w-full text-left rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-800 p-4 shadow-sm hover:border-emerald-500 dark:hover:border-emerald-500 flex items-center justify-between gap-4 active:scale-[0.99] transition"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onOpenTournament(t.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  className="w-full text-left rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-800 p-4 shadow-sm hover:border-emerald-500 dark:hover:border-emerald-500 flex items-center justify-between gap-3 active:scale-[0.99] transition cursor-pointer"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
@@ -113,20 +201,45 @@ export function HomeScreen({
                         <span className="font-extrabold text-base text-slate-900 dark:text-white truncate">
                           {t.name}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
-                          {t.status === 'setup' ? 'Cadastro' : 'Em jogo'}
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                            t.status === 'finished'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                              : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                          }`}
+                        >
+                          {statusLabel}
                         </span>
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
                           <Lock className="w-2.5 h-2.5" /> Senha
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                        {sportName} • {formatName} • {t.teams.length} times
+                        {sportName} • {formatName} • {t.teams.length} duplas/times
                       </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
-                </button>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickShare(e, t)}
+                      title="Copiar link de compartilhamento"
+                      aria-label={`Copiar link do torneio ${t.name}`}
+                      className="h-9 px-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold flex items-center gap-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition"
+                    >
+                      {isCopied ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <Share2 className="w-3.5 h-3.5" />
+                      )}
+                      <span className="hidden sm:inline">
+                        {isCopied ? 'Copiado!' : 'Link'}
+                      </span>
+                    </button>
+                    <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
+                  </div>
+                </div>
               );
             })}
           </div>

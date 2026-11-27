@@ -19,8 +19,8 @@ export function parsePublicRouteFromLocation(): PublicRouteParams | null {
     params.get('compartilhar') || params.get('torneio') || params.get('acompanhar');
   const token = params.get('token');
 
-  if (queryId) {
-    return { tournamentId: queryId, token };
+  if (queryId && queryId.trim()) {
+    return { tournamentId: queryId.trim(), token };
   }
 
   const match = window.location.pathname.match(/\/acompanhar\/([^/]+)/);
@@ -313,12 +313,39 @@ export function readPublicTournamentFromStorage(
   return stripSensitiveFields(found);
 }
 
-function extractRelayTournament(rawEventData: string): Tournament | null {
+async function extractRelayTournament(rawEventData: string): Promise<Tournament | null> {
   try {
-    const parsed = JSON.parse(rawEventData);
+    const parsed = JSON.parse(rawEventData) as {
+      message?: unknown;
+      attachment?: { url?: string };
+    };
+
+    // ntfy.sh converte mensagens maiores que 4KB em attachment JSON
+    if (parsed?.attachment?.url) {
+      try {
+        const attRes = await fetch(parsed.attachment.url, { cache: 'no-store' });
+        if (attRes.ok) {
+          const attMsg = (await attRes.json()) as {
+            z?: string;
+            tournament?: Tournament;
+          };
+          if (attMsg && typeof attMsg.z === 'string') {
+            return decodeCompressedSnapshot(attMsg.z);
+          }
+          if (attMsg?.tournament) return attMsg.tournament;
+          return attMsg as unknown as Tournament;
+        }
+      } catch {
+        // Fallback to message parsing
+      }
+    }
+
     const rawMessage = parsed?.message;
     if (!rawMessage) return null;
-    const msg = typeof rawMessage === 'string' ? JSON.parse(rawMessage) : rawMessage;
+    const msg =
+      typeof rawMessage === 'string'
+        ? (JSON.parse(rawMessage) as { z?: string; tournament?: Tournament })
+        : (rawMessage as { z?: string; tournament?: Tournament });
     if (msg && typeof msg.z === 'string') {
       return decodeCompressedSnapshot(msg.z);
     }
@@ -370,7 +397,7 @@ export function subscribePublicTournament(
     try {
       const baseUrl = supabaseConfig.url.replace(/\/+$/, '');
       const res = await fetch(
-        `${baseUrl}/rest/v1/tournaments?id=eq.${tournamentId}&select=id,public_token,public_status,data`,
+        `${baseUrl}/rest/v1/tournaments?id=eq.${encodeURIComponent(tournamentId)}&select=id,public_token,public_status,data`,
         {
           headers: {
             apikey: supabaseConfig.anonKey,
@@ -414,20 +441,20 @@ export function subscribePublicTournament(
       const text = await res.text();
       const lines = text.trim().split('\n').filter(Boolean);
       for (let i = lines.length - 1; i >= 0; i -= 1) {
-        const remoteTournament = extractRelayTournament(lines[i]);
+        const remoteTournament = await extractRelayTournament(lines[i]);
         if (applyCandidate(remoteTournament)) return;
       }
     } catch {
       // Ignora
     }
+  };
+
+  // Aguarda todas as fontes iniciais antes de concluir que o torneio não foi encontrado
+  void Promise.allSettled([pollSupabase(), pollFirebase(), pollRelay()]).then(() => {
     if (!cancelled && !bestTournament) {
       onUpdate(null);
     }
-  };
-
-  void pollSupabase();
-  void pollFirebase();
-  void pollRelay();
+  });
 
   // 5. Streams em tempo real (SSE) do Relay e Firebase
   let relayEventSource: EventSource | null = null;
@@ -436,8 +463,9 @@ export function subscribePublicTournament(
       relayEventSource = new EventSource(`${RELAY_BASE_URL}/${topic}/sse`);
       relayEventSource.onmessage = (event) => {
         if (cancelled) return;
-        const remote = extractRelayTournament(event.data);
-        applyCandidate(remote);
+        void extractRelayTournament(event.data).then((remote) => {
+          applyCandidate(remote);
+        });
       };
     } catch {
       relayEventSource = null;
@@ -466,7 +494,7 @@ export function subscribePublicTournament(
     }
   }
 
-  // 6. BroadcastChannel para comunicação local
+  // 6. BroadcastChannel + Storage event para comunicação local instantânea entre abas
   let ch: BroadcastChannel | null = null;
   if (typeof BroadcastChannel !== 'undefined') {
     try {
@@ -481,6 +509,16 @@ export function subscribePublicTournament(
     } catch {
       ch = null;
     }
+  }
+
+  const handleStorageSync = (event: StorageEvent) => {
+    if (cancelled) return;
+    if (!event.key || event.key === 'arenapro_tournaments_v1') {
+      applyCandidate(readPublicTournamentFromStorage(tournamentId, token));
+    }
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', handleStorageSync);
   }
 
   // Polling leve a cada 5s para manter atualizado
@@ -498,6 +536,9 @@ export function subscribePublicTournament(
   return () => {
     cancelled = true;
     if (pollTimer !== undefined) window.clearInterval(pollTimer);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', handleStorageSync);
+    }
     if (relayEventSource) relayEventSource.close();
     if (fbEventSource) fbEventSource.close();
     if (ch) ch.close();

@@ -5,8 +5,14 @@ import {
   buildShareTournamentUrl,
   decodeSnapshotFromHash,
   encodeSnapshot,
+  parsePublicRouteFromLocation,
 } from './liveSync';
-import { HISTORY_EXPIRATION_MS, pruneExpiredTournaments } from './storage';
+import {
+  HISTORY_EXPIRATION_MS,
+  loadTournaments,
+  pruneExpiredTournaments,
+  saveTournaments,
+} from './storage';
 
 describe('liveSync (Zero Database Realtime Sync)', () => {
   const dummyTournament: Tournament = {
@@ -103,5 +109,55 @@ describe('liveSync (Zero Database Realtime Sync)', () => {
     const result = pruneExpiredTournaments([recent, expired], now);
     expect(result.active.map((t) => t.id)).toEqual(['recent-1']);
     expect(result.removedIds).toEqual(['expired-1']);
+  });
+
+  it('keeps active (setup and in_progress) tournaments even after 24 hours', () => {
+    const now = 1_700_000_000_000;
+    const oldSetup: Tournament = {
+      ...dummyTournament,
+      id: 'setup-old',
+      status: 'setup',
+      createdAt: now - HISTORY_EXPIRATION_MS * 3,
+      updatedAt: now - HISTORY_EXPIRATION_MS * 3,
+    };
+    const oldInProgress: Tournament = {
+      ...dummyTournament,
+      id: 'progress-old',
+      status: 'in_progress',
+      createdAt: now - HISTORY_EXPIRATION_MS * 2,
+      updatedAt: now - HISTORY_EXPIRATION_MS * 2,
+    };
+
+    const result = pruneExpiredTournaments([oldSetup, oldInProgress], now);
+    expect(result.active.map((t) => t.id)).toEqual(['setup-old', 'progress-old']);
+    expect(result.removedIds).toEqual([]);
+  });
+
+  it('persists and restores created tournaments in localStorage reliably', () => {
+    const store = new Map<string, string>();
+    const prevStorage = (globalThis as { localStorage?: Storage }).localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => store.set(k, String(v)),
+        removeItem: (k: string) => store.delete(k),
+      },
+    });
+
+    try {
+      const saved = saveTournaments([dummyTournament]);
+      expect(saved).toBe(true);
+      const reloaded = loadTournaments();
+      expect(reloaded).toHaveLength(1);
+      expect(reloaded[0].id).toBe(dummyTournament.id);
+      expect(reloaded[0].name).toBe('Copa Verão Futevôlei');
+      expect(typeof parsePublicRouteFromLocation).toBe('function');
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: prevStorage,
+      });
+    }
   });
 });

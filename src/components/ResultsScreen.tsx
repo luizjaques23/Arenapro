@@ -1,6 +1,8 @@
 import confetti from 'canvas-confetti';
 import {
   Award,
+  Check,
+  Copy,
   Download,
   FileText,
   GitFork,
@@ -12,6 +14,7 @@ import {
 import { useEffect, useState } from 'react';
 import { getSportDisplayName } from '../engine/sports';
 import { computeStandings, computeTopScorers } from '../engine/tournamentEngine';
+import { buildShareTournamentUrl, publishTournamentLive } from '../services/liveSync';
 import { generateTournamentPdf } from '../services/pdfReport';
 import { shareTournamentSummary } from '../services/share';
 import { soundEngine } from '../services/sound';
@@ -33,7 +36,9 @@ export function ResultsScreen({
   onGoHome,
 }: ResultsScreenProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
   const isFutevolei = tournament.sport.id === 'futevolei';
+  const shareUrl = buildShareTournamentUrl(tournament);
 
   const standings = computeStandings(tournament);
   const scorers = computeTopScorers(tournament);
@@ -80,6 +85,18 @@ export function ResultsScreen({
       );
     } catch {
       showToast('Não foi possível copiar automaticamente.');
+    }
+  };
+
+  const handleCopyShareLink = async () => {
+    void publishTournamentLive(tournament);
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedLink(true);
+      showToast('Link exclusivo de visualização copiado!');
+      window.setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      showToast('Não foi possível copiar o link.');
     }
   };
 
@@ -142,6 +159,29 @@ export function ResultsScreen({
         >
           <Share2 className="w-5 h-5" />
           Compartilhar
+        </button>
+      </section>
+
+      {/* Exclusive Share Link */}
+      <section className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 p-3.5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Share2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-extrabold text-emerald-900 dark:text-emerald-200">
+              Link exclusivo do torneio (somente visualização)
+            </p>
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 truncate">
+              {shareUrl}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopyShareLink}
+          className="h-9 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shrink-0"
+        >
+          {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          {copiedLink ? 'Copiado!' : 'Copiar Link'}
         </button>
       </section>
 

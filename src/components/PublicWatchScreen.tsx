@@ -1,4 +1,4 @@
-import { Eye, Lock, Radio, Trophy, Users, WifiOff } from 'lucide-react';
+import { ArrowLeft, Eye, Lock, Radio, RefreshCw, Trophy, Users, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getSportDisplayName } from '../engine/sports';
 import { computeStandings, computeTopScorers } from '../engine/tournamentEngine';
@@ -9,19 +9,26 @@ import { BracketDashboard } from './BracketDashboard';
 interface PublicWatchScreenProps {
   tournamentId: string;
   token: string | null;
+  onExitPublicView?: () => void;
 }
 
-export function PublicWatchScreen({ tournamentId, token }: PublicWatchScreenProps) {
+export function PublicWatchScreen({
+  tournamentId,
+  token,
+  onExitPublicView,
+}: PublicWatchScreenProps) {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
+    setLoaded(false);
     const unsubscribe = subscribePublicTournament(tournamentId, token, (data) => {
       setTournament(data);
       setLoaded(true);
     });
     return unsubscribe;
-  }, [tournamentId, token]);
+  }, [tournamentId, token, retryKey]);
 
   if (!loaded) {
     return (
@@ -37,7 +44,7 @@ export function PublicWatchScreen({ tournamentId, token }: PublicWatchScreenProp
   if (!tournament) {
     return (
       <main className="max-w-lg mx-auto px-4 py-16">
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 text-center space-y-3 shadow-lg">
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 text-center space-y-4 shadow-lg">
           <WifiOff className="w-12 h-12 mx-auto text-amber-500" />
           <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
             Torneio não encontrado
@@ -45,6 +52,26 @@ export function PublicWatchScreen({ tournamentId, token }: PublicWatchScreenProp
           <p className="text-sm text-slate-600 dark:text-slate-400">
             Não foi possível carregar as informações deste campeonato. Verifique se o link compartilhado está completo ou aguarde a conexão com a rede.
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setRetryKey((k) => k + 1)}
+              className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Tentar novamente
+            </button>
+            {onExitPublicView && (
+              <button
+                type="button"
+                onClick={onExitPublicView}
+                className="h-10 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Voltar ao App
+              </button>
+            )}
+          </div>
         </div>
       </main>
     );
