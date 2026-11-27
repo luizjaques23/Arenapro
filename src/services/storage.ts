@@ -3,8 +3,33 @@ import type { Tournament } from '../types/tournament';
 import { removeTournamentPinData } from './pinAuth';
 
 const TOURNAMENTS_KEY = 'arenapro_tournaments_v1';
+const DELETED_TOURNAMENTS_KEY = 'arenapro_deleted_tournaments_v1';
 const SETTINGS_KEY = 'arenapro_settings_v1';
 export const HISTORY_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 horas
+
+export function loadDeletedTournamentIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_TOURNAMENTS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed.filter((x) => typeof x === 'string')) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function markTournamentDeleted(tournamentId: string): void {
+  if (!tournamentId) return;
+  try {
+    const set = loadDeletedTournamentIds();
+    set.add(tournamentId);
+    // Keep last 200 deleted IDs to avoid unbounded growth
+    const arr = Array.from(set).slice(-200);
+    localStorage.setItem(DELETED_TOURNAMENTS_KEY, JSON.stringify(arr));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
 
 export interface AppSettings {
   theme: 'light' | 'dark';
@@ -78,9 +103,10 @@ export function loadTournaments(): Tournament[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
+    const deletedIds = loadDeletedTournamentIds();
     const normalized = parsed
       .map(normalizeLoadedTournament)
-      .filter((t): t is Tournament => t !== null);
+      .filter((t): t is Tournament => t !== null && !deletedIds.has(t.id));
 
     const { active, removedIds } = pruneExpiredTournaments(normalized);
     if (removedIds.length > 0) {

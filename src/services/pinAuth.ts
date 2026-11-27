@@ -119,9 +119,13 @@ export function verifyTournamentPin(
   candidatePin: string,
 ): boolean {
   if (!tournament) return false;
+  const localHash = getStoredTournamentPinHash(tournament.id);
   const expectedHash =
-    tournament.pinHash || getStoredTournamentPinHash(tournament.id);
+    tournament.pinHash && tournament.pinHash !== '__REMOTE_LOCKED__'
+      ? tournament.pinHash
+      : localHash || tournament.pinHash;
   if (!expectedHash) return true;
+  if (expectedHash === '__REMOTE_LOCKED__') return false;
 
   const clean = sanitizeNumericPin(candidatePin);
   if (!isValidNumericPin(clean)) return false;

@@ -1,10 +1,17 @@
 import LZString from 'lz-string';
 import type { Tournament } from '../types/tournament';
 import { getFirebaseDatabaseUrl, isFirebaseConfigured } from './firebaseConfig';
-import { loadTournaments } from './storage';
+import { getStoredTournamentPinHash } from './pinAuth';
+import {
+  isTournamentExpired,
+  loadDeletedTournamentIds,
+  loadTournaments,
+  markTournamentDeleted,
+} from './storage';
 import { isSupabaseConfigured, supabaseConfig } from './supabaseConfig';
 
 const CHANNEL_NAME = 'arenapro_live_sync_v1';
+const GLOBAL_DISCOVERY_TOPIC = 'arenapro_global_tournaments_v1';
 const RELAY_BASE_URL = 'https://ntfy.sh';
 
 export interface PublicRouteParams {
@@ -219,16 +226,27 @@ function getFirebaseTournamentEndpoint(tournamentId: string): string | null {
 export async function publishTournamentLive(tournament: Tournament): Promise<void> {
   const isFinished =
     tournament.status === 'finished' || tournament.publicStatus === 'encerrado';
-  const updatedTournament: Tournament = stripSensitiveFields({
+  const resolvedPinHash =
+    tournament.pinHash && tournament.pinHash !== '__REMOTE_LOCKED__'
+      ? tournament.pinHash
+      : getStoredTournamentPinHash(tournament.id) ?? undefined;
+
+  const publicTournament: Tournament = stripSensitiveFields({
     ...tournament,
     publicStatus: isFinished ? 'encerrado' : 'ativo',
   });
+
+  // Para listagem protegida entre dispositivos, preserva apenas o hash da senha (nunca a senha em texto)
+  const syncRecord: Tournament = {
+    ...publicTournament,
+    ...(resolvedPinHash ? { pinHash: resolvedPinHash } : {}),
+  };
 
   // 1. Broadcast local para abas no mesmo aparelho
   if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
     try {
       const ch = new BroadcastChannel(CHANNEL_NAME);
-      ch.postMessage({ type: 'TOURNAMENT_SYNC', tournament: updatedTournament });
+      ch.postMessage({ type: 'TOURNAMENT_SYNC', tournament: publicTournament });
       ch.close();
     } catch {
       // Ignore
@@ -250,8 +268,8 @@ export async function publishTournamentLive(tournament: Tournament): Promise<voi
         body: JSON.stringify({
           id: tournament.id,
           public_token: tournament.publicToken ?? null,
-          public_status: updatedTournament.publicStatus,
-          data: updatedTournament,
+          public_status: publicTournament.publicStatus,
+          data: syncRecord,
           updated_at: new Date().toISOString(),
         }),
       });
@@ -268,7 +286,7 @@ export async function publishTournamentLive(tournament: Tournament): Promise<voi
         await fetch(fbEndpoint, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedTournament),
+          body: JSON.stringify(syncRecord),
         });
       } catch {
         // Ignora
@@ -279,13 +297,13 @@ export async function publishTournamentLive(tournament: Tournament): Promise<voi
   // 4. Sempre envia também ao relay público leve para garantir sincronização entre celulares
   try {
     const topic = getRelayTopic(tournament.id);
-    const compressed = encodeSnapshot(updatedTournament);
+    const compressed = encodeSnapshot(publicTournament);
     if (compressed) {
       await fetch(`${RELAY_BASE_URL}/${topic}`, {
         method: 'POST',
         body: JSON.stringify({
           z: compressed,
-          ts: updatedTournament.updatedAt ?? Date.now(),
+          ts: publicTournament.updatedAt ?? Date.now(),
         }),
         headers: {
           Title: 'ArenaPro Live Update',
@@ -296,6 +314,232 @@ export async function publishTournamentLive(tournament: Tournament): Promise<voi
   } catch {
     // Ignora
   }
+
+  // 5. Publica resumo no canal global de descoberta entre dispositivos (com hash da senha para bloqueio)
+  try {
+    const globalSummary: Tournament = {
+      id: syncRecord.id,
+      publicToken: syncRecord.publicToken,
+      publicStatus: syncRecord.publicStatus,
+      pinHash: syncRecord.pinHash,
+      name: syncRecord.name,
+      sport: syncRecord.sport,
+      format: syncRecord.format,
+      targetTeamsCount: syncRecord.targetTeamsCount,
+      teams: syncRecord.teams,
+      status: syncRecord.status,
+      createdAt: syncRecord.createdAt,
+      updatedAt: syncRecord.updatedAt,
+      finishedAt: syncRecord.finishedAt,
+      championId: syncRecord.championId,
+      runnerUpId: syncRecord.runnerUpId,
+      thirdPlaceId: syncRecord.thirdPlaceId,
+      fourthPlaceId: syncRecord.fourthPlaceId,
+      bracket: syncRecord.bracket,
+      kingOfCourt: syncRecord.kingOfCourt,
+    };
+    const compressedGlobal = LZString.compressToEncodedURIComponent(
+      JSON.stringify(globalSummary),
+    );
+    if (compressedGlobal) {
+      await fetch(`${RELAY_BASE_URL}/${GLOBAL_DISCOVERY_TOPIC}`, {
+        method: 'POST',
+        body: JSON.stringify({ g: compressedGlobal, id: syncRecord.id }),
+        headers: {
+          Title: 'ArenaPro Directory',
+          Priority: 'low',
+        },
+      });
+    }
+  } catch {
+    // Ignora
+  }
+}
+
+export async function deleteTournamentFromSync(tournament: Tournament): Promise<void> {
+  markTournamentDeleted(tournament.id);
+
+  if (isSupabaseConfigured()) {
+    const baseUrl = supabaseConfig.url.replace(/\/+$/, '');
+    try {
+      await fetch(
+        `${baseUrl}/rest/v1/tournaments?id=eq.${encodeURIComponent(tournament.id)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            apikey: supabaseConfig.anonKey,
+            Authorization: `Bearer ${supabaseConfig.anonKey}`,
+          },
+        },
+      );
+    } catch {
+      // Ignora
+    }
+
+    // Marca também como excluído via UPSERT (garantido mesmo sob RLS sem DELETE)
+    try {
+      await fetch(`${baseUrl}/rest/v1/tournaments?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseConfig.anonKey,
+          Authorization: `Bearer ${supabaseConfig.anonKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({
+          id: tournament.id,
+          public_token: tournament.publicToken ?? null,
+          public_status: 'encerrado',
+          data: {
+            ...stripSensitiveFields(tournament),
+            deletedAt: Date.now(),
+          },
+          updated_at: new Date().toISOString(),
+        }),
+      });
+    } catch {
+      // Ignora
+    }
+  }
+
+  if (isFirebaseConfigured()) {
+    const fbEndpoint = getFirebaseTournamentEndpoint(tournament.id);
+    if (fbEndpoint) {
+      try {
+        await fetch(fbEndpoint, { method: 'DELETE' });
+      } catch {
+        // Ignora
+      }
+    }
+  }
+
+  try {
+    await fetch(`${RELAY_BASE_URL}/${GLOBAL_DISCOVERY_TOPIC}`, {
+      method: 'POST',
+      body: JSON.stringify({ deletedId: tournament.id, deletedAt: Date.now() }),
+      headers: {
+        Title: 'ArenaPro Delete',
+        Priority: 'low',
+      },
+    });
+  } catch {
+    // Ignora
+  }
+}
+
+function normalizeSyncedDirectoryTournament(
+  raw: (Tournament & { deletedAt?: number }) | null | undefined,
+): Tournament | null {
+  if (!raw || typeof raw !== 'object' || !raw.id) return null;
+  if (raw.deletedAt) return null;
+  const normalized = normalizeTournamentData(raw);
+  if (!normalized) return null;
+  // Preserva pinHash se existir no registro remoto; se ausente, marca proteção remota
+  const preservedPinHash =
+    typeof raw.pinHash === 'string' && raw.pinHash.trim()
+      ? raw.pinHash
+      : '__REMOTE_LOCKED__';
+  return {
+    ...normalized,
+    pinHash: preservedPinHash,
+  };
+}
+
+export async function fetchGlobalCreatedTournaments(): Promise<{
+  tournaments: Tournament[];
+  deletedIds: Set<string>;
+}> {
+  const deletedIds = loadDeletedTournamentIds();
+  const byId = new Map<string, Tournament>();
+
+  const consider = (raw: (Tournament & { deletedAt?: number }) | null | undefined) => {
+    if (!raw || !raw.id) return;
+    if (raw.deletedAt) {
+      deletedIds.add(raw.id);
+      byId.delete(raw.id);
+      return;
+    }
+    if (deletedIds.has(raw.id)) return;
+    const item = normalizeSyncedDirectoryTournament(raw);
+    if (!item) return;
+    if (isTournamentExpired(item)) return;
+    const prev = byId.get(item.id);
+    if (!prev || (item.updatedAt ?? 0) >= (prev.updatedAt ?? 0)) {
+      byId.set(item.id, item);
+    }
+  };
+
+  if (isSupabaseConfigured()) {
+    try {
+      const baseUrl = supabaseConfig.url.replace(/\/+$/, '');
+      const res = await fetch(
+        `${baseUrl}/rest/v1/tournaments?select=id,data,updated_at&order=updated_at.desc&limit=50`,
+        {
+          headers: {
+            apikey: supabaseConfig.anonKey,
+            Authorization: `Bearer ${supabaseConfig.anonKey}`,
+          },
+          cache: 'no-store',
+        },
+      );
+      if (res.ok) {
+        const rows = (await res.json()) as Array<{
+          id: string;
+          data?: Tournament & { deletedAt?: number };
+        }>;
+        for (const row of rows) {
+          consider(row?.data);
+        }
+      }
+    } catch {
+      // Ignora erro de rede
+    }
+  }
+
+  try {
+    const res = await fetch(`${RELAY_BASE_URL}/${GLOBAL_DISCOVERY_TOPIC}/json?poll=1`, {
+      cache: 'no-store',
+    });
+    if (res.ok) {
+      const text = await res.text();
+      const lines = text.trim().split('\n').filter(Boolean);
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line) as {
+            message?: string;
+            attachment?: { url?: string };
+          };
+          let payload: { g?: string; deletedId?: string } | null = null;
+          if (parsed?.attachment?.url) {
+            const attRes = await fetch(parsed.attachment.url, { cache: 'no-store' });
+            if (attRes.ok) {
+              payload = (await attRes.json()) as { g?: string; deletedId?: string };
+            }
+          } else if (parsed?.message) {
+            payload = JSON.parse(parsed.message) as { g?: string; deletedId?: string };
+          }
+          if (payload?.deletedId) {
+            deletedIds.add(payload.deletedId);
+            byId.delete(payload.deletedId);
+          } else if (payload?.g) {
+            const json = LZString.decompressFromEncodedURIComponent(payload.g);
+            if (json) {
+              consider(JSON.parse(json) as Tournament & { deletedAt?: number });
+            }
+          }
+        } catch {
+          // Ignora linha inválida
+        }
+      }
+    }
+  } catch {
+    // Ignora erro de rede
+  }
+
+  return {
+    tournaments: Array.from(byId.values()),
+    deletedIds,
+  };
 }
 
 export function broadcastTournamentUpdate(tournament: Tournament): void {

@@ -10,7 +10,6 @@ import { PublicWatchScreen } from './components/PublicWatchScreen';
 import { ResetModal } from './components/ResetModal';
 import { ResultsScreen } from './components/ResultsScreen';
 import { SetupScreen, type SetupResult } from './components/SetupScreen';
-import { ShareAreaScreen } from './components/ShareAreaScreen';
 import { SplashScreen } from './components/SplashScreen';
 import { TeamsScreen } from './components/TeamsScreen';
 import { TopBar } from './components/TopBar';
@@ -26,6 +25,8 @@ import {
   updateTournamentTeamsInPlace,
 } from './engine/tournamentEngine';
 import {
+  deleteTournamentFromSync,
+  fetchGlobalCreatedTournaments,
   parsePublicRouteFromLocation,
   publishTournamentLive,
   type PublicRouteParams,
@@ -39,8 +40,10 @@ import {
 import { soundEngine } from './services/sound';
 import {
   exportTournamentJson,
+  loadDeletedTournamentIds,
   loadSettings,
   loadTournaments,
+  markTournamentDeleted,
   parseImportedTournament,
   pruneExpiredTournaments,
   saveSettings,
@@ -55,8 +58,7 @@ type Screen =
   | 'bracket'
   | 'live_match'
   | 'results'
-  | 'history'
-  | 'share';
+  | 'history';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -67,8 +69,6 @@ export function App() {
   const [publicParams, setPublicParams] = useState<PublicRouteParams | null>(() =>
     parsePublicRouteFromLocation(),
   );
-  const [publicPreviewReturnScreen, setPublicPreviewReturnScreen] =
-    useState<Screen | null>(null);
 
   const [showSplash, setShowSplash] = useState(!publicParams);
   const [screen, setScreen] = useState<Screen>('home');
@@ -139,6 +139,88 @@ export function App() {
     };
   }, [publicParams]);
 
+  // Cross-device discovery: sync created tournaments across computers/phones (protected by password)
+  useEffect(() => {
+    if (publicParams) return;
+    let cancelled = false;
+
+    const syncDirectory = async () => {
+      try {
+        const { tournaments: remoteList, deletedIds: remoteDeleted } =
+          await fetchGlobalCreatedTournaments();
+        if (cancelled) return;
+
+        const localDeleted = loadDeletedTournamentIds();
+        const combinedDeleted = new Set([...localDeleted, ...remoteDeleted]);
+        for (const delId of remoteDeleted) {
+          markTournamentDeleted(delId);
+        }
+
+        setTournaments((prev) => {
+          const mergedMap = new Map<string, Tournament>();
+
+          for (const localItem of prev) {
+            if (!combinedDeleted.has(localItem.id)) {
+              mergedMap.set(localItem.id, localItem);
+            }
+          }
+
+          for (const remoteItem of remoteList) {
+            if (combinedDeleted.has(remoteItem.id)) continue;
+            const existing = mergedMap.get(remoteItem.id);
+            if (!existing) {
+              mergedMap.set(remoteItem.id, remoteItem);
+            } else if (existing.id !== activeTournamentId) {
+              const shouldTakeRemote =
+                (remoteItem.updatedAt ?? 0) > (existing.updatedAt ?? 0);
+              const preservedPinHash =
+                existing.pinHash && existing.pinHash !== '__REMOTE_LOCKED__'
+                  ? existing.pinHash
+                  : remoteItem.pinHash;
+
+              if (shouldTakeRemote) {
+                mergedMap.set(remoteItem.id, {
+                  ...remoteItem,
+                  ...(preservedPinHash ? { pinHash: preservedPinHash } : {}),
+                });
+              } else if (
+                (!existing.pinHash || existing.pinHash === '__REMOTE_LOCKED__') &&
+                remoteItem.pinHash &&
+                remoteItem.pinHash !== '__REMOTE_LOCKED__'
+              ) {
+                mergedMap.set(remoteItem.id, {
+                  ...existing,
+                  pinHash: remoteItem.pinHash,
+                });
+              }
+            }
+          }
+
+          const { active } = pruneExpiredTournaments(Array.from(mergedMap.values()));
+          saveTournaments(active);
+          return active;
+        });
+      } catch {
+        // Ignore temporary offline errors
+      }
+    };
+
+    void syncDirectory();
+    const timer = window.setInterval(() => {
+      void syncDirectory();
+    }, 15_000);
+    const onFocusSync = () => {
+      void syncDirectory();
+    };
+    window.addEventListener('focus', onFocusSync);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocusSync);
+    };
+  }, [publicParams, activeTournamentId]);
+
   useEffect(() => {
     const handlePopState = () => {
       setPublicParams(parsePublicRouteFromLocation());
@@ -188,16 +270,6 @@ export function App() {
     else setScreen('bracket');
   };
 
-  const handleLockActiveTournament = useCallback(() => {
-    lockTournamentSession();
-    setActiveTournamentId(null);
-    setActiveMatchId(null);
-    setShowResetModal(false);
-    setShowEditTeamsModal(false);
-    setScreen('home');
-    showToastMessage('Torneio bloqueado com segurança.');
-  }, [showToastMessage]);
-
   const updateActiveTournament = (updater: (t: Tournament) => Tournament) => {
     if (!activeTournamentId || !activeTournament) return;
     if (!isTournamentUnlockedInSession(activeTournament)) {
@@ -238,8 +310,7 @@ export function App() {
     const target = tournaments.find((t) => t.id === id);
     if (!target) return;
 
-    // Always require the tournament's created password before deleting in History
-    lockTournamentSession(target.id);
+    // Always require the tournament's created password before deleting
     setPendingPinRequest({ tournamentId: target.id, action: 'delete' });
   };
 
@@ -262,12 +333,21 @@ export function App() {
 
     if (req?.action === 'delete') {
       removeTournamentPinData(tournamentId);
+      markTournamentDeleted(tournamentId);
+      void deleteTournamentFromSync(target);
       setTournaments((prev) => {
         const next = prev.filter((t) => t.id !== tournamentId);
         saveTournaments(next);
         return next;
       });
-      if (activeTournamentId === tournamentId) setActiveTournamentId(null);
+      if (activeTournamentId === tournamentId) {
+        lockTournamentSession();
+        setActiveTournamentId(null);
+        setActiveMatchId(null);
+        setShowResetModal(false);
+        setShowEditTeamsModal(false);
+        setScreen('home');
+      }
       showToastMessage('Torneio excluído.');
       return;
     }
@@ -316,7 +396,7 @@ export function App() {
 
   const handleBack = (): (() => void) | undefined => {
     if (screen === 'home') return undefined;
-    if (screen === 'setup' || screen === 'history' || screen === 'share') return leaveToHome;
+    if (screen === 'setup' || screen === 'history') return leaveToHome;
     if (screen === 'teams') return leaveToHome;
     if (screen === 'bracket') return leaveToHome;
     if (screen === 'live_match') return () => setScreen('bracket');
@@ -332,12 +412,7 @@ export function App() {
     }
     setPublicParams(null);
     setTournaments(loadTournaments());
-    if (publicPreviewReturnScreen) {
-      setScreen(publicPreviewReturnScreen);
-      setPublicPreviewReturnScreen(null);
-    } else {
-      setScreen('home');
-    }
+    setScreen('home');
   };
 
   const isInsideProtectedTournament =
@@ -378,8 +453,6 @@ export function App() {
         };
       case 'history':
         return { title: 'Histórico', subtitle: 'Torneios salvos neste dispositivo' };
-      case 'share':
-        return { title: 'Compartilhar', subtitle: 'Links públicos (somente visualização)' };
     }
   };
 
@@ -396,15 +469,11 @@ export function App() {
         <TopBar
           title={headerMeta.title}
           subtitle={headerMeta.subtitle}
-          onBack={
-            publicParams
-              ? publicPreviewReturnScreen
-                ? exitPublicView
-                : undefined
-              : handleBack()
-          }
-          onLockTournament={
-            isInsideProtectedTournament ? handleLockActiveTournament : undefined
+          onBack={publicParams ? undefined : handleBack()}
+          onDeleteTournament={
+            isInsideProtectedTournament && activeTournament
+              ? () => handleDeleteTournament(activeTournament.id)
+              : undefined
           }
           theme={settings.theme}
           onToggleTheme={() =>
@@ -436,22 +505,7 @@ export function App() {
                 onNewTournament={() => setScreen('setup')}
                 onOpenTournament={handleOpenTournament}
                 onOpenHistory={() => setScreen('history')}
-                onOpenShareArea={() => setScreen('share')}
                 showIosInstallHint={isIos && !isStandalone}
-              />
-            )}
-
-            {screen === 'share' && (
-              <ShareAreaScreen
-                tournaments={tournaments}
-                onCreateTournament={() => setScreen('setup')}
-                onPreviewTournament={(t) => {
-                  setPublicPreviewReturnScreen('share');
-                  setPublicParams({
-                    tournamentId: t.id,
-                    token: t.publicToken ?? null,
-                  });
-                }}
               />
             )}
 
@@ -468,7 +522,7 @@ export function App() {
                   soundEngine.playWhistle();
                   setScreen('bracket');
                 }}
-                onLockTournament={handleLockActiveTournament}
+                onDeleteTournament={() => handleDeleteTournament(activeTournament.id)}
               />
             )}
 
@@ -512,7 +566,7 @@ export function App() {
                   if (!isTournamentUnlockedInSession(activeTournament)) return;
                   setShowEditTeamsModal(true);
                 }}
-                onLockTournament={handleLockActiveTournament}
+                onDeleteTournament={() => handleDeleteTournament(activeTournament.id)}
               />
             )}
 

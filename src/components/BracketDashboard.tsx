@@ -7,12 +7,12 @@ import {
   Download,
   Flag,
   ListOrdered,
-  Lock,
   Pencil,
   Play,
   RotateCcw,
   Share2,
   Swords,
+  Trash2,
   Trophy,
   Users,
   X,
@@ -33,7 +33,7 @@ interface BracketDashboardProps {
   onExportJson: () => void;
   onOpenReset: () => void;
   onEditTeams?: () => void;
-  onLockTournament?: () => void;
+  onDeleteTournament?: () => void;
 }
 
 function getTeam(teams: Team[], id: string | null | undefined): Team | undefined {
@@ -135,8 +135,8 @@ function MatchCard({
       onClick={() => isReadyToPlay && onSelectMatch(match)}
       disabled={!isReadyToPlay}
       className={`w-full text-left rounded-2xl border-2 ${borderAccent} bg-white/95 dark:bg-slate-900/95 p-3.5 shadow-sm transition ${isReadyToPlay
-          ? 'hover:border-slate-900 dark:hover:border-white active:scale-[0.98] cursor-pointer'
-          : 'opacity-90 cursor-default'
+        ? 'hover:border-slate-900 dark:hover:border-white active:scale-[0.98] cursor-pointer'
+        : 'opacity-90 cursor-default'
         }`}
     >
       <div className="flex items-center justify-between gap-2 text-[11px] font-bold mb-2">
@@ -151,8 +151,8 @@ function MatchCard({
         ) : isReadyToPlay ? (
           <span
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full shrink-0 ${match.status === 'live'
-                ? 'bg-rose-500 text-white animate-pulse'
-                : 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950'
+              ? 'bg-rose-500 text-white animate-pulse'
+              : 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950'
               }`}
           >
             <Play className="w-3 h-3 fill-current" />
@@ -179,10 +179,10 @@ function MatchCard({
             <div
               key={idx}
               className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl ${isWinner
-                  ? 'bg-emerald-50 dark:bg-emerald-950/50 font-extrabold'
-                  : row.team
-                    ? 'bg-slate-50 dark:bg-slate-800/60 font-semibold'
-                    : 'bg-slate-50/70 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-700/70 font-semibold'
+                ? 'bg-emerald-50 dark:bg-emerald-950/50 font-extrabold'
+                : row.team
+                  ? 'bg-slate-50 dark:bg-slate-800/60 font-semibold'
+                  : 'bg-slate-50/70 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-700/70 font-semibold'
                 }`}
             >
               <div className="flex items-center gap-2 min-w-0">
@@ -343,7 +343,7 @@ export function BracketDashboard({
   onExportJson,
   onOpenReset,
   onEditTeams,
-  onLockTournament,
+  onDeleteTournament,
 }: BracketDashboardProps) {
   const [filter, setFilter] = useState<
     'all' | 'blocks' | 'winners' | 'losers' | 'finals'
@@ -456,14 +456,15 @@ export function BracketDashboard({
                 EDITAR
               </button>
             )}
-            {onLockTournament && (
+            {onDeleteTournament && (
               <button
                 type="button"
-                onClick={onLockTournament}
-                className="h-9 px-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-slate-700 text-xs font-extrabold flex items-center gap-1.5 text-amber-800 dark:text-amber-300"
+                onClick={onDeleteTournament}
+                aria-label="Excluir torneio"
+                title="Excluir torneio"
+                className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 flex items-center justify-center text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition"
               >
-                <Lock className="w-3.5 h-3.5" />
-                Sair / Bloquear torneio
+                <Trash2 className="w-4 h-4" />
               </button>
             )}
             <button
@@ -539,8 +540,8 @@ export function BracketDashboard({
                 type="button"
                 onClick={() => setFilter(tab.id as typeof filter)}
                 className={`h-10 px-4 rounded-xl text-xs font-extrabold whitespace-nowrap flex items-center gap-1.5 transition ${filter === tab.id
-                    ? 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950'
-                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+                  ? 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
                   }`}
               >
                 {tab.id === 'blocks' && <ListOrdered className="w-3.5 h-3.5" />}

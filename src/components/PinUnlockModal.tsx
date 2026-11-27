@@ -2,6 +2,7 @@ import { Eye, EyeOff, KeyRound, Lock, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { getSportDisplayName } from '../engine/sports';
 import {
+  getStoredTournamentPinHash,
   hasTournamentPin,
   hashPin,
   isValidNumericPin,
@@ -31,6 +32,9 @@ export function PinUnlockModal({
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isRemoteLocked =
+    tournament.pinHash === '__REMOTE_LOCKED__' &&
+    !getStoredTournamentPinHash(tournament.id);
   const isLegacyWithoutPin = !hasTournamentPin(tournament);
   const isDeleteAction = action === 'delete';
   const sportName = getSportDisplayName(tournament.sport);
@@ -47,6 +51,12 @@ export function PinUnlockModal({
 
     if (!isValidNumericPin(cleaned)) {
       setError(`Digite uma senha numérica com pelo menos ${MIN_PIN_LENGTH} dígitos.`);
+      return;
+    }
+
+    if (isRemoteLocked) {
+      setError('Senha incorreta ou torneio protegido em outro dispositivo.');
+      setPin('');
       return;
     }
 

@@ -9,7 +9,9 @@ import {
 } from './liveSync';
 import {
   HISTORY_EXPIRATION_MS,
+  loadDeletedTournamentIds,
   loadTournaments,
+  markTournamentDeleted,
   pruneExpiredTournaments,
   saveTournaments,
 } from './storage';
@@ -153,6 +155,11 @@ describe('liveSync (Zero Database Realtime Sync)', () => {
       expect(reloaded[0].id).toBe(dummyTournament.id);
       expect(reloaded[0].name).toBe('Copa Verão Futevôlei');
       expect(typeof parsePublicRouteFromLocation).toBe('function');
+
+      // Deleted tournaments are filtered out from listing
+      markTournamentDeleted(dummyTournament.id);
+      expect(loadDeletedTournamentIds().has(dummyTournament.id)).toBe(true);
+      expect(loadTournaments()).toHaveLength(0);
     } finally {
       Object.defineProperty(globalThis, 'localStorage', {
         configurable: true,

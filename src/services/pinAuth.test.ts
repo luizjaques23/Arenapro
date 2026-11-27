@@ -3,6 +3,7 @@ import { SPORT_PRESETS } from '../engine/sports';
 import { createTournament } from '../engine/tournamentEngine';
 import { decodeSnapshotFromHash, encodeSnapshot } from './liveSync';
 import {
+  hasTournamentPin,
   hashPin,
   isTournamentUnlockedInSession,
   isValidNumericPin,
@@ -153,5 +154,20 @@ describe('pinAuth (100% Frontend Numeric Password Protection)', () => {
     expect(decoded).not.toBeNull();
     expect(decoded?.id).toBe(t1.id);
     expect(decoded?.pinHash).toBeUndefined();
+  });
+
+  it('rejects PIN verification for remote tournaments marked __REMOTE_LOCKED__', () => {
+    const futevolei = SPORT_PRESETS[0].defaultConfig;
+    const remoteLocked = createTournament({
+      name: 'Torneio Remoto',
+      sport: futevolei,
+      format: 'bracket',
+      targetTeamsCount: 4,
+    });
+    remoteLocked.pinHash = '__REMOTE_LOCKED__';
+
+    expect(hasTournamentPin(remoteLocked)).toBe(true);
+    expect(verifyTournamentPin(remoteLocked, '1234')).toBe(false);
+    expect(verifyTournamentPin(remoteLocked, '0000')).toBe(false);
   });
 });

@@ -1,16 +1,13 @@
 import {
-  Check,
   ChevronRight,
   History,
   Lock,
   Plus,
-  Share2,
   Smartphone,
   Trophy,
 } from 'lucide-react';
 import { useState } from 'react';
 import { getSportDisplayName } from '../engine/sports';
-import { buildShareTournamentUrl, publishTournamentLive } from '../services/liveSync';
 import type { Tournament } from '../types/tournament';
 import { FutevoleiBall } from './FutevoleiBall';
 
@@ -22,7 +19,6 @@ interface HomeScreenProps {
   onNewTournament: () => void;
   onOpenTournament: (id: string) => void;
   onOpenHistory: () => void;
-  onOpenShareArea: () => void;
   showIosInstallHint: boolean;
 }
 
@@ -31,11 +27,9 @@ export function HomeScreen({
   onNewTournament,
   onOpenTournament,
   onOpenHistory,
-  onOpenShareArea,
   showIosInstallHint,
 }: HomeScreenProps) {
   const [filter, setFilter] = useState<'all' | 'active' | 'finished'>('all');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const sortedTournaments = [...tournaments].sort(
     (a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0),
@@ -48,19 +42,6 @@ export function HomeScreen({
     if (filter === 'finished') return t.status === 'finished';
     return true;
   });
-
-  const handleQuickShare = async (e: React.MouseEvent, t: Tournament) => {
-    e.stopPropagation();
-    void publishTournamentLive(t);
-    const url = buildShareTournamentUrl(t);
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedId(t.id);
-      window.setTimeout(() => setCopiedId((curr) => (curr === t.id ? null : curr)), 2200);
-    } catch {
-      onOpenShareArea();
-    }
-  };
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 space-y-6 pb-12">
@@ -91,14 +72,6 @@ export function HomeScreen({
             </button>
             <button
               type="button"
-              onClick={onOpenShareArea}
-              className="h-14 px-5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 border border-white/15 active:scale-[0.98] transition"
-            >
-              <Share2 className="w-5 h-5 text-emerald-400" />
-              Compartilhar
-            </button>
-            <button
-              type="button"
               onClick={onOpenHistory}
               className="h-14 px-5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 border border-white/15 active:scale-[0.98] transition"
             >
@@ -113,7 +86,7 @@ export function HomeScreen({
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-            Meus Torneios ({sortedTournaments.length})
+            Torneios Criados ({sortedTournaments.length})
           </h3>
           {sortedTournaments.length > 0 && (
             <div className="flex items-center gap-1.5">
@@ -176,21 +149,13 @@ export function HomeScreen({
                   : t.status === 'setup'
                     ? 'Cadastro'
                     : 'Em jogo';
-              const isCopied = copiedId === t.id;
 
               return (
-                <div
+                <button
                   key={t.id}
+                  type="button"
                   onClick={() => onOpenTournament(t.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onOpenTournament(t.id);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  className="w-full text-left rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-800 p-4 shadow-sm hover:border-emerald-500 dark:hover:border-emerald-500 flex items-center justify-between gap-3 active:scale-[0.99] transition cursor-pointer"
+                  className="w-full text-left rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-800 p-4 shadow-sm hover:border-emerald-500 dark:hover:border-emerald-500 flex items-center justify-between gap-4 active:scale-[0.99] transition"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
@@ -219,27 +184,8 @@ export function HomeScreen({
                       </p>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickShare(e, t)}
-                      title="Copiar link de compartilhamento"
-                      aria-label={`Copiar link do torneio ${t.name}`}
-                      className="h-9 px-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold flex items-center gap-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition"
-                    >
-                      {isCopied ? (
-                        <Check className="w-3.5 h-3.5" />
-                      ) : (
-                        <Share2 className="w-3.5 h-3.5" />
-                      )}
-                      <span className="hidden sm:inline">
-                        {isCopied ? 'Copiado!' : 'Link'}
-                      </span>
-                    </button>
-                    <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
-                  </div>
-                </div>
+                  <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
+                </button>
               );
             })}
           </div>

@@ -1,7 +1,6 @@
 import {
   Check,
   Copy,
-  Lock,
   Pencil,
   Play,
   Plus,
@@ -26,14 +25,14 @@ interface TeamsScreenProps {
   tournament: Tournament;
   onUpdateTeams: (teams: Team[]) => void;
   onStartTournament: (shuffle: boolean) => void;
-  onLockTournament?: () => void;
+  onDeleteTournament?: () => void;
 }
 
 export function TeamsScreen({
   tournament,
   onUpdateTeams,
   onStartTournament,
-  onLockTournament,
+  onDeleteTournament,
 }: TeamsScreenProps) {
   const isFutevolei = tournament.sport.id === 'futevolei';
   const defaultPlayerSlots = tournament.sport.id === 'futsal' ? 3 : 2;
@@ -198,15 +197,16 @@ export function TeamsScreen({
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 pb-28 space-y-6">
-      {onLockTournament && (
+      {onDeleteTournament && (
         <div className="flex items-center justify-end">
           <button
             type="button"
-            onClick={onLockTournament}
-            className="h-9 px-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-slate-700 text-xs font-extrabold text-amber-800 dark:text-amber-300 flex items-center gap-1.5 shadow-sm hover:bg-amber-50 dark:hover:bg-slate-800 transition"
+            onClick={onDeleteTournament}
+            aria-label="Excluir torneio"
+            title="Excluir torneio"
+            className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shadow-sm hover:bg-rose-100 dark:hover:bg-rose-900/60 transition"
           >
-            <Lock className="w-3.5 h-3.5" />
-            Sair / Bloquear torneio
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -349,8 +349,8 @@ export function TeamsScreen({
                     onClick={() => setColor(c)}
                     aria-label={`Cor ${c}`}
                     className={`w-8 h-8 rounded-full border-2 transition ${color === c
-                        ? 'border-slate-900 dark:border-white scale-110'
-                        : 'border-transparent'
+                      ? 'border-slate-900 dark:border-white scale-110'
+                      : 'border-transparent'
                       }`}
                     style={{ backgroundColor: c }}
                   />

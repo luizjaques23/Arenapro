@@ -1,11 +1,11 @@
-import { ArrowLeft, Download, Lock, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Download, Moon, Sun, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { FutevoleiBall } from './FutevoleiBall';
 
 interface TopBarProps {
   title: string;
   subtitle?: string;
   onBack?: () => void;
-  onLockTournament?: () => void;
+  onDeleteTournament?: () => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   muted: boolean;
@@ -18,7 +18,7 @@ export function TopBar({
   title,
   subtitle,
   onBack,
-  onLockTournament,
+  onDeleteTournament,
   theme,
   onToggleTheme,
   muted,
@@ -57,16 +57,15 @@ export function TopBar({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {onLockTournament && (
+          {onDeleteTournament && (
             <button
               type="button"
-              onClick={onLockTournament}
-              title="Sair / Bloquear torneio"
-              aria-label="Sair / Bloquear torneio"
-              className="h-10 px-2.5 sm:px-3 rounded-xl bg-amber-100/90 dark:bg-amber-950/70 hover:bg-amber-200 dark:hover:bg-amber-900/70 text-amber-900 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800/60 text-xs font-extrabold flex items-center gap-1.5 active:scale-95 transition"
+              onClick={onDeleteTournament}
+              title="Excluir torneio"
+              aria-label="Excluir torneio"
+              className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/70 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 flex items-center justify-center active:scale-95 transition"
             >
-              <Lock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sair / Bloquear</span>
+              <Trash2 className="w-4 h-4" />
             </button>
           )}
           {canInstall && onInstallClick && (
