@@ -1,8 +1,10 @@
 import { getSportDisplayName } from '../engine/sports';
 import type { Tournament } from '../types/tournament';
+import { removeTournamentPinData } from './pinAuth';
 
 const TOURNAMENTS_KEY = 'arenapro_tournaments_v1';
 const SETTINGS_KEY = 'arenapro_settings_v1';
+export const HISTORY_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 horas
 
 export interface AppSettings {
   theme: 'light' | 'dark';
@@ -14,12 +16,54 @@ const DEFAULT_SETTINGS: AppSettings = {
   muted: false,
 };
 
+export function isTournamentExpired(
+  tournament: Tournament,
+  now = Date.now(),
+): boolean {
+  const referenceTime =
+    tournament.status === 'finished'
+      ? (tournament.finishedAt ?? tournament.updatedAt ?? tournament.createdAt)
+      : (tournament.updatedAt ?? tournament.createdAt);
+
+  if (typeof referenceTime !== 'number' || Number.isNaN(referenceTime)) {
+    return false;
+  }
+  return now - referenceTime >= HISTORY_EXPIRATION_MS;
+}
+
+export function pruneExpiredTournaments(
+  tournaments: Tournament[],
+  now = Date.now(),
+): { active: Tournament[]; removedIds: string[] } {
+  const active: Tournament[] = [];
+  const removedIds: string[] = [];
+
+  for (const t of tournaments) {
+    if (isTournamentExpired(t, now)) {
+      removedIds.push(t.id);
+    } else {
+      active.push(t);
+    }
+  }
+
+  return { active, removedIds };
+}
+
 export function loadTournaments(): Tournament[] {
   try {
     const raw = localStorage.getItem(TOURNAMENTS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    const { active, removedIds } = pruneExpiredTournaments(parsed as Tournament[]);
+    if (removedIds.length > 0) {
+      for (const id of removedIds) {
+        removeTournamentPinData(id);
+      }
+      saveTournaments(active);
+    }
+    return active;
   } catch {
     return [];
   }

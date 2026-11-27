@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { Tournament } from '../types/tournament';
 import {
   buildPublicWatchUrl,
+  buildShareTournamentUrl,
   decodeSnapshotFromHash,
   encodeSnapshot,
 } from './liveSync';
+import { HISTORY_EXPIRATION_MS, pruneExpiredTournaments } from './storage';
 
 describe('liveSync (Zero Database Realtime Sync)', () => {
   const dummyTournament: Tournament = {
@@ -74,5 +76,32 @@ describe('liveSync (Zero Database Realtime Sync)', () => {
     const decoded = decodeSnapshotFromHash(`#s=${encoded}`);
     expect(decoded).not.toBeNull();
     expect(decoded?.id).toBe(dummyTournament.id);
+  });
+
+  it('builds exclusive share URL with compartilhar query param and snapshot hash', () => {
+    const url = buildShareTournamentUrl(dummyTournament, 'https://arenapro.app/');
+    expect(url).toContain('compartilhar=torneio-unit-test-123');
+    expect(url).toContain('token=pub_tok_abc');
+    expect(url).toContain('#d=');
+  });
+
+  it('automatically removes tournaments older than 24 hours from history', () => {
+    const now = 1_700_000_000_000;
+    const recent: Tournament = {
+      ...dummyTournament,
+      id: 'recent-1',
+      status: 'finished',
+      finishedAt: now - (HISTORY_EXPIRATION_MS - 60_000),
+    };
+    const expired: Tournament = {
+      ...dummyTournament,
+      id: 'expired-1',
+      status: 'finished',
+      finishedAt: now - HISTORY_EXPIRATION_MS - 1,
+    };
+
+    const result = pruneExpiredTournaments([recent, expired], now);
+    expect(result.active.map((t) => t.id)).toEqual(['recent-1']);
+    expect(result.removedIds).toEqual(['expired-1']);
   });
 });

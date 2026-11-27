@@ -15,7 +15,8 @@ export interface PublicRouteParams {
 export function parsePublicRouteFromLocation(): PublicRouteParams | null {
   if (typeof window === 'undefined') return null;
   const params = new URLSearchParams(window.location.search);
-  const queryId = params.get('torneio') || params.get('acompanhar');
+  const queryId =
+    params.get('compartilhar') || params.get('torneio') || params.get('acompanhar');
   const token = params.get('token');
 
   if (queryId) {
@@ -156,6 +157,30 @@ export function decodeSnapshotFromHash(rawHash?: string): Tournament | null {
   } catch {
     return null;
   }
+}
+
+export function buildShareTournamentUrl(
+  tournament: Tournament,
+  baseOrigin?: string,
+): string {
+  const origin =
+    baseOrigin ??
+    (typeof window !== 'undefined' ? window.location.href : 'https://arenapro.local/');
+  const url = new URL(origin);
+  const cleanedPath = url.pathname.replace(/\/acompanhar\/[^/]+\/?$/, '/');
+  url.pathname = cleanedPath || '/';
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('compartilhar', tournament.id);
+  if (tournament.publicToken) {
+    url.searchParams.set('token', tournament.publicToken);
+  }
+
+  const snap = encodeSnapshot(tournament);
+  if (snap) {
+    url.hash = `d=${snap}`;
+  }
+  return url.toString();
 }
 
 export function buildPublicWatchUrl(tournament: Tournament, baseOrigin?: string): string {

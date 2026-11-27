@@ -41,6 +41,7 @@ import {
   loadSettings,
   loadTournaments,
   parseImportedTournament,
+  pruneExpiredTournaments,
   saveSettings,
   saveTournaments,
 } from './services/storage';
@@ -100,6 +101,30 @@ export function App() {
       void publishTournamentLive(active);
     }
   }, [tournaments, publicParams, activeTournamentId]);
+
+  // Automatic 24h history cleanup (runs periodically and on tab focus, zero manual action needed)
+  useEffect(() => {
+    if (publicParams) return;
+
+    const cleanupExpired = () => {
+      setTournaments((prev) => {
+        const { active, removedIds } = pruneExpiredTournaments(prev);
+        if (removedIds.length === 0) return prev;
+        for (const id of removedIds) {
+          removeTournamentPinData(id);
+        }
+        return active;
+      });
+    };
+
+    cleanupExpired();
+    const intervalId = window.setInterval(cleanupExpired, 60_000);
+    window.addEventListener('focus', cleanupExpired);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', cleanupExpired);
+    };
+  }, [publicParams]);
 
   useEffect(() => {
     const standalone =

@@ -2192,7 +2192,10 @@ export function startTournament(
     throw new Error('É necessário cadastrar pelo menos 2 times para iniciar.');
   }
 
-  const orderedTeams = options?.shuffle
+  // Futevôlei sempre segue a sequência automática e organizada definida pelo sistema, sem sorteio aleatório
+  const shouldShuffle =
+    tournament.sport.id === 'futevolei' ? false : Boolean(options?.shuffle);
+  const orderedTeams = shouldShuffle
     ? shuffleArray(tournament.teams)
     : [...tournament.teams];
   const teamIds = orderedTeams.map((t) => t.id);

@@ -271,4 +271,26 @@ describe('Futevôlei odd formats (7, 9, 11, 13 duplas) — hybrid double elimina
     expect(t1Standing?.team.name).toBe('Lucas / Carlos');
     expect(t1Standing?.wins).toBe(1);
   });
+
+  it('Futevôlei ignora sorteio aleatório e segue sequência automática organizada pelo sistema', () => {
+    const sport = SPORT_PRESETS[0].defaultConfig; // Futevôlei
+    const teams = makeTeams(8);
+    const base = createTournament({
+      name: 'Futevôlei Sequencial',
+      sport,
+      format: 'bracket',
+      targetTeamsCount: 8,
+      teams,
+    });
+
+    const startedWithShuffleFlag = startTournament(base, { shuffle: true });
+    expect(startedWithShuffleFlag.teams.map((t) => t.id)).toEqual(
+      teams.map((t) => t.id),
+    );
+    const r1Matches = startedWithShuffleFlag.bracket?.winnersRounds[0].matches ?? [];
+    expect(r1Matches[0].teamAId).toBe('team_1');
+    expect(r1Matches[0].teamBId).toBe('team_2');
+    expect(r1Matches[1].teamAId).toBe('team_3');
+    expect(r1Matches[1].teamBId).toBe('team_4');
+  });
 });

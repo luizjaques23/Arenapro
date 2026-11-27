@@ -6,12 +6,12 @@ import {
   Crown,
   Download,
   Flag,
-  Link2,
   ListOrdered,
   Lock,
   Pencil,
   Play,
   RotateCcw,
+  Share2,
   Swords,
   Trophy,
   Users,
@@ -19,8 +19,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { getSportDisplayName } from '../engine/sports';
-import { getAllMatches, isPublicLinkActive } from '../engine/tournamentEngine';
-import { buildPublicWatchUrl } from '../services/liveSync';
+import { getAllMatches } from '../engine/tournamentEngine';
+import { buildShareTournamentUrl } from '../services/liveSync';
 import type { BracketRound, Match, Team, Tournament } from '../types/tournament';
 
 interface BracketDashboardProps {
@@ -357,8 +357,7 @@ export function BracketDashboard({
 
   const isFutevolei = tournament.sport.id === 'futevolei';
   const sportName = getSportDisplayName(tournament.sport);
-  const publicUrl =
-    !readOnly && isPublicLinkActive(tournament) ? buildPublicWatchUrl(tournament) : '';
+  const shareUrl = !readOnly ? buildShareTournamentUrl(tournament) : '';
 
   const bracket = tournament.bracket;
   const koc = tournament.kingOfCourt;
@@ -384,10 +383,22 @@ export function BracketDashboard({
     onOpenMatch(match.id);
   };
 
-  const handleCopyPublicLink = async () => {
-    if (!publicUrl) return;
+  const handleCopyShareLink = async () => {
+    if (!shareUrl) return;
     try {
-      await navigator.clipboard.writeText(publicUrl);
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          await navigator.share({
+            title: tournament.name,
+            text: `Acompanhe o torneio ${tournament.name} (somente visualização):`,
+            url: shareUrl,
+          });
+          return;
+        } catch {
+          // Fallback to clipboard copy
+        }
+      }
+      await navigator.clipboard.writeText(shareUrl);
       setCopiedLink(true);
       window.setTimeout(() => setCopiedLink(false), 2500);
     } catch {
@@ -404,27 +415,27 @@ export function BracketDashboard({
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-5 pb-28 space-y-5">
-      {/* Public Tracking Link Bar (only visible while tournament is active and not read-only) */}
-      {publicUrl && (
+      {/* Exclusive Share Tournament Link Bar (read-only access without password) */}
+      {shareUrl && (
         <section className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 p-3.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <Link2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <Share2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div className="min-w-0">
               <p className="text-xs font-extrabold text-emerald-900 dark:text-emerald-200">
-                Link público ao vivo (somente leitura)
+                Compartilhar Torneio (link exclusivo • somente visualização)
               </p>
               <p className="text-[11px] text-emerald-700 dark:text-emerald-400 truncate">
-                {publicUrl}
+                {shareUrl}
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={handleCopyPublicLink}
+            onClick={handleCopyShareLink}
             className="h-9 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shrink-0"
           >
             {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {copiedLink ? 'Copiado!' : 'Copiar Link'}
+            {copiedLink ? 'Copiado!' : 'Compartilhar'}
           </button>
         </section>
       )}
